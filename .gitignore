@@ -6,3 +6,9 @@
 
 # virtualenv
 .python-version
+
+# PNG images
+.png
+
+# MatLab data files
+.dat

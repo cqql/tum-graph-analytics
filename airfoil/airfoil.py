@@ -50,9 +50,7 @@ def main():
 
     ypred = booster.predict(test)
 
-    # Mean squared error
     mse = mean_squared_error(ytest, ypred)
-
     print("Mean Squared Error = {:f}".format(mse))
 
     model = io.StringIO()

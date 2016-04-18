@@ -3,3 +3,6 @@
 
 # Amazon data
 *.json.gz
+
+# virtualenv
+.python-version

@@ -37,8 +37,18 @@ public:
       if (this->numGradients == ps::NumWorkers()) {
         int N = this->w.size();
 
+        double normw = 0.0;
+        for (int i = 0; i < N; i++) {
+          normw += this->w[i] * this->w[i];
+        }
+        normw = std::sqrt(normw);
+
         for (int i = 0; i < N; i++) {
           this->w[i] -= this->eta * this->grad[i];
+
+          if (normw > 0) {
+            this->w[i] -= this->lambda * this->w[i] / normw;
+          }
         }
 
         // Reset gradients
@@ -60,6 +70,7 @@ public:
 private:
   int numGradients = 0;
   double eta = .15;
+  double lambda = 0.001;
   bool initialized = false;
   std::vector<T> grad;
   std::vector<T> w;

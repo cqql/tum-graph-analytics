@@ -1,0 +1,10 @@
+# CMake artifacts
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Build artifacts
+ps-lite
+gdesc

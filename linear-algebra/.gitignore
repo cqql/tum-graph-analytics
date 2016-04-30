@@ -1,0 +1,10 @@
+# Build artifacts
+armadillo
+eigen
+
+# CMake artifacts
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles
+compile_commands.json
+Makefile

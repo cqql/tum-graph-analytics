@@ -9,6 +9,11 @@
 
 #include <ps/ps.h>
 
+// All of these have to be different from any ps::Command
+enum struct GDescCommand {
+  INITIALIZE = 10
+};
+
 template <typename T>
 class ServerHandle {
 public:
@@ -17,7 +22,9 @@ public:
     size_t n = req_data.keys.size();
     ps::KVPairs<T> res;
 
-    if (req_meta.push) {
+    if (req_meta.cmd == GDescCommand::INITIALIZE) {
+
+    } else if (req_meta.push) {
       if (!this->initialized) {
         this->grad.resize(n);
         std::fill(this->grad.begin(), this->grad.end(), 0.0);
@@ -123,7 +130,27 @@ public:
 
     std::iota(keys.begin(), keys.end(), 0);
 
+    double mean = 0.0;
+    for (int i = 0; i < data.N; i++) {
+      mean += data.y[i];
+    }
+    mean /= data.N;
+
+    // Push the dimensionality and mean
+    ps::Message meanMsg;
+    meanMsg.meta.simple_app = true;
+    meanMsg.meta.request = true;
+    meanMsg.meta.push = true;
+    worker.Push({0, 1}, {(double)data.n, mean}, {}, GDescCommand::INITIALIZE);
+
+
+    office->Barrier(ps::kServerGroup | ps::kWorkerGroup);
+
     for (int t = 0; t < T; t++) {
+      // Pull the current weights
+      int ts = this->worker.Pull(keys, &w);
+      this->worker.Wait(ts);
+
       std::vector<double> error(data.N);
       for (int i = 0; i < data.N; i++) {
         error[i] = data.y[i] - std::inner_product(w.begin(), w.end(),
@@ -162,11 +189,6 @@ public:
 
       // Wait for all workers to push
       office->Barrier(ps::kServerGroup | ps::kWorkerGroup);
-
-      if (t < T - 1) {
-        int ts = this->worker.Pull(keys, &w);
-        this->worker.Wait(ts);
-      }
     }
 
     if (ps::MyRank() == 0) {

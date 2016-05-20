@@ -16,6 +16,11 @@ libconfig++.a libsnappy.a libyaml-cpp.a libleveldb.a libzmq.a)
 
 BOSEN_LIBS := $(addprefix $(BOSEN_ROOT)/lib/, libpetuum-ml.a libpetuum-ps.a)
 
+BOOST_LIBS := $(addprefix $(BOSEN_THIRD_PARTY_ROOT)/lib/, \
+libboost_program_options.a)
+
+# LIBS :=
+
 # Import bosen settings
 PETUUM_ROOT := $(BOSEN_ROOT)
 -include $(PETUUM_ROOT)/defns.mk

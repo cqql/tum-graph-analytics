@@ -16,7 +16,7 @@ Split = collections.namedtuple("Split", ["prodoffset", "useroffset", "byprods",
                                          "byusers"])
 
 
-def split(file, k):
+def split(file, k, test_size):
     data = pandas.read_csv(file,
                            header=None,
                            names=["User", "Product", "Rating", "Timestamp"])
@@ -33,7 +33,7 @@ def split(file, k):
 
     # Split into training and test set
     train, test = sklearn.cross_validation.train_test_split(data,
-                                                            test_size=0.2)
+                                                            test_size=test_size)
 
     # Save test data
     Rtest = scipy.sparse.coo_matrix((test["Rating"],
@@ -101,6 +101,7 @@ def savesplit(path, split):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-t", type=float, default=0.2, help="Test size")
     parser.add_argument("k", type=int, help="Split k-ways")
     parser.add_argument("data", help="Review data file")
     parser.add_argument("out", help="Output directory")
@@ -110,7 +111,7 @@ def main():
     if os.path.exists(args.out):
         parser.error("Output directory does already exist")
 
-    users, products, splits, Rtest = split(args.data, args.k)
+    users, products, splits, Rtest = split(args.data, args.k, args.t)
 
     os.makedirs(args.out)
     np.savetxt(os.path.join(args.out, "users"), users, fmt="%s")

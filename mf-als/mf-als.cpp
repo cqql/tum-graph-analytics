@@ -33,7 +33,9 @@ int main(int argc, char** argv) {
       ("users", po::value<int>(), "Number of users")
       ("products", po::value<int>(), "Number of products")
       ("workers", po::value<int>()->default_value(3),
-       "Number of workers");
+       "Number of workers")
+      ("eval-rounds,e", po::value<int>()->default_value(0),
+       "Eval the model every k rounds");
   // clang-format on
 
   po::variables_map vm;
@@ -44,6 +46,7 @@ int main(int argc, char** argv) {
   int num_users = vm["users"].as<int>();
   int num_products = vm["products"].as<int>();
   int num_workers = vm["workers"].as<int>();
+  int eval_rounds = vm["eval-rounds"].as<int>();
 
   // Register row types
   petuum::PSTableGroup::RegisterRow<petuum::DenseRow<float>>(RowType::FLOAT);
@@ -98,10 +101,10 @@ int main(int argc, char** argv) {
 
   // Run workers
   for (int i = 0; i < num_workers; i++) {
-    threads[i] =
-        std::thread(&mfals::Worker::run,
-                    std::unique_ptr<mfals::Worker>(new mfals::Worker(
-                        i, "out", rank, iterations, Table::P, Table::U)));
+    threads[i] = std::thread(
+        &mfals::Worker::run,
+        std::unique_ptr<mfals::Worker>(new mfals::Worker(
+            i, "out", rank, iterations, eval_rounds, Table::P, Table::U)));
   }
 
   for (auto& thread : threads) {

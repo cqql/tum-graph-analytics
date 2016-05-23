@@ -11,11 +11,12 @@
 namespace mfals {
 
 Worker::Worker(int id, std::string basepath, int k, int iterations,
-               int ptableid, int utableid)
+               int evalrounds, int ptableid, int utableid)
     : id(id),
       basepath(basepath),
       k(k),
       iterations(iterations),
+      evalrounds(evalrounds),
       ptableid(ptableid),
       utableid(utableid) {}
 
@@ -62,10 +63,15 @@ void Worker::run() {
 
   LOG(INFO) << "Start optimization";
 
-  float step = 1/256;
+  float step = 1.0;
 
   for (int i = 0; i < this->iterations; i++) {
     LOG(INFO) << "Optimization round " << i << " on worker " << this->id;
+
+    if (this->id == 0) {
+      std::cout << "Round " << i + 1 << " with step length " << step
+                << std::endl;
+    }
 
     // Compute gradient for P
     arma::fmat Pgrad(Rprod.n_rows, this->k, arma::fill::zeros);
@@ -83,6 +89,7 @@ void Worker::run() {
       }
     }
 
+    Pgrad = arma::normalise(Pgrad, 2, 1);
     Pgrad = Pgrad * (-step);
 
     // Update P table
@@ -116,6 +123,7 @@ void Worker::run() {
       }
     }
 
+    UTgrad = arma::normalise(UTgrad, 2, 1);
     UTgrad = UTgrad * (-step);
 
     // Update U table
@@ -132,31 +140,30 @@ void Worker::run() {
 
     // Fetch updated U^T
     UT = this->loadmat(Utable, Rprod.n_cols, this->k);
+
+    step /= 2;
+
+    // Evaluate
+    if (this->evalrounds > 0 && (i + 1) % this->evalrounds == 0) {
+      if (this->id == 0) {
+        std::cout << "Test => ";
+        this->evaltest(P, UT);
+      }
+
+      if (this->id == 0) {
+        std::cout << "Training => ";
+        this->eval(P, UT, Rprod, poffset, 0);
+      }
+    }
   }
 
-  // Evaluate on test data
-  if (this->id == 0) {
-    std::ostringstream testpath;
-    testpath << this->basepath << "/test";
-    std::ifstream f(testpath.str(), std::ios::binary);
-    auto Rtest = MatrixData::parsemat(f);
-
-    float mse = 0;
-
-    arma::sp_fmat::const_iterator start = Rtest.begin();
-    arma::sp_fmat::const_iterator end = Rtest.end();
-    for (arma::sp_fmat::const_iterator it = start; it != end; ++it) {
-      int row = it.row();
-      int col = it.col();
-
-      float error = (*it) - arma::dot(P.row(row), UT.row(col));
-      mse += error * error;
-
-      LOG(INFO) << "Product " << std::setw(7) << row << ", User "
-                << std::setw(7) << col << ": " << std::setw(7) << error << " (" << *it << ")";
-    }
-
-    LOG(INFO) << "MSE = " << mse / Rtest.n_elem;
+  // Evaluate (if not evaluated in last round)
+  if (this->id == 0 &&
+      (this->evalrounds <= 0 || this->iterations % this->evalrounds != 0)) {
+    std::cout << "Test => ";
+    this->evaltest(P, UT);
+    std::cout << "Training => ";
+    this->eval(P, UT, Rprod, poffset, 0);
   }
 
   LOG(INFO) << "Shutdown worker " << this->id;
@@ -190,5 +197,36 @@ arma::fmat Worker::loadmat(petuum::Table<float>& table, int m, int n) {
   }
 
   return M;
+}
+
+void Worker::evaltest(arma::fmat& P, arma::fmat& UT) {
+  std::ostringstream testpath;
+  testpath << this->basepath << "/test";
+  std::ifstream f(testpath.str(), std::ios::binary);
+  auto Rtest = MatrixData::parsemat(f);
+
+  this->eval(P, UT, Rtest, 0, 0);
+}
+
+void Worker::eval(arma::fmat& P, arma::fmat& UT, arma::sp_fmat& R,
+                  int rowoffset, int coloffset) {
+  float mse = 0;
+
+  arma::sp_fmat::const_iterator start = R.begin();
+  arma::sp_fmat::const_iterator end = R.end();
+  for (arma::sp_fmat::const_iterator it = start; it != end; ++it) {
+    int row = it.row();
+    int col = it.col();
+
+    float error =
+        (*it) - arma::dot(P.row(row + rowoffset), UT.row(col + coloffset));
+    mse += error * error;
+
+    LOG(INFO) << "Product " << std::setw(7) << row + rowoffset << ", User "
+              << std::setw(7) << col + coloffset << ": " << std::setw(7)
+              << error << " (" << *it << ")";
+  }
+
+  std::cout << "MSE = " << mse / R.n_nonzero << std::endl;
 }
 }

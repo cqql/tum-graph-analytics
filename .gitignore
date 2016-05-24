@@ -2,3 +2,6 @@
 libs/bosen
 libs/bosen-third-party
 libs/strads
+
+# Python artifacts
+__pycache__

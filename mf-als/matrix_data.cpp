@@ -14,10 +14,8 @@ struct MatrixData MatrixData::parse(std::string path) {
     throw std::invalid_argument("Could not open file");
   }
 
-  f.read(reinterpret_cast<char*>(&md.prodoffset), sizeof(int));
-  md.Rprod = MatrixData::parsemat(f);
-  f.read(reinterpret_cast<char*>(&md.useroffset), sizeof(int));
-  md.Ruser = MatrixData::parsemat(f);
+  f.read(reinterpret_cast<char*>(&md.offset), sizeof(int));
+  md.R = MatrixData::parsemat(f);
 
   return md;
 }

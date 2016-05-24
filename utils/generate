@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+
+import argparse
+import csv
+import sys
+
+import numpy as np
+
+import reviews
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", type=int, default=5, help="Number of rows")
+    parser.add_argument("-n", type=int, default=5, help="Number of columns")
+
+    args = parser.parse_args()
+    m = args.m
+    n = args.n
+
+    A = np.random.normal(0, 1, size=(m, n))
+
+    reviews.generate(sys.stdout, A)
+
+
+if __name__ == "__main__":
+    main()

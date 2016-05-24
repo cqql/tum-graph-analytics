@@ -1,0 +1,170 @@
+#!/usr/bin/env python
+
+import argparse
+import math
+import os
+import struct
+
+import numpy as np
+
+import reviews
+import scipy.sparse
+import sklearn.cross_validation
+
+
+def train_test_split(R, test_size):
+    """Split sparse matrix `R` into a training and a test part.
+    """
+    # Split data indices into training and test set
+    train, test = sklearn.cross_validation.train_test_split(
+        np.arange(R.nnz),
+        test_size=test_size)
+
+    # Split R accordingly
+    Rtrain = scipy.sparse.coo_matrix(
+        (R.data[train], (R.row[train], R.col[train])),
+        shape=R.shape)
+    Rtest = scipy.sparse.coo_matrix(
+        (R.data[test], (R.row[test], R.col[test])),
+        shape=R.shape)
+
+    return Rtrain, Rtest
+
+
+def kway_split(R, k):
+    """k-way split a matrix along the first dimension.
+
+    This implementation tries to split in such a way that the number of nonzero
+    entries is as balanced as possible to facilitate load balancing between the
+    workers.
+
+    Parameters
+    ----------
+    R : scipy.sparse.coo_matrix
+        Sparse matrix to split
+    k : int
+        Number of splits
+
+    Returns
+    -------
+    list of tuples
+        Each tuple has first the offset along the first axis and then the split
+        part of `R`
+    """
+    # Convert to CSR format for slicing
+    #
+    # CSR was chosen over CSV because it is best suited for selecting rows and
+    # slicing along rows.
+    R = R.tocsr()
+
+    # Expected number of nonzero entries per split
+    n = R.nnz / k
+
+    splits = []
+
+    while len(splits) != k:
+        # Add rows to the current split until each split has at least n (besides
+        # possibly the last)
+        split = []
+        offset = 0
+        N = 0
+        i = 0
+        while i < R.shape[0]:
+            if N < n:
+                split.append(i)
+                N += R.getrow(i).nnz
+                i += 1
+            elif len(splits) < k - 1:
+                splits.append((offset, split))
+                offset = i
+                N = 0
+                split = []
+
+        # Append the last split
+        splits.append((offset, split))
+
+        # If matrix could not be split evenly
+        if len(splits) < k:
+            # Reduce n
+            n *= 0.9
+
+            splits = []
+
+    # Select rows
+    splits = [(ofs, R[split, :]) for ofs, split in splits]
+
+    # Convert the splits back to COO
+    splits = [(ofs, Rs.tocoo()) for ofs, Rs in splits]
+
+    return splits
+
+
+def savemat(f, mat):
+    f.write(struct.pack("2II", *mat.shape, mat.nnz))
+    f.write(mat.row.astype(np.uint32).tobytes())
+    f.write(mat.col.astype(np.uint32).tobytes())
+    f.write(mat.data.astype(np.float32).tobytes())
+
+
+def savesplit(path, offset, R):
+    with open(path, "wb") as f:
+        f.write(struct.pack("I", offset))
+        savemat(f, R)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v",
+                        "--verbose",
+                        default=False,
+                        action="store_true",
+                        help="Be verbose")
+    parser.add_argument("-t", type=float, default=0.2, help="Test size")
+    parser.add_argument("k", type=int, help="Split k-ways")
+    parser.add_argument("data", help="Review data file")
+    parser.add_argument("out", help="Output directory")
+
+    args = parser.parse_args()
+
+    if os.path.exists(args.out):
+        parser.error("Output directory does already exist")
+
+    products, users, R = reviews.parse(args.data)
+    Rtrain, Rtest = train_test_split(R, args.t)
+    prodsplits = kway_split(Rtrain, args.k)
+    usersplits = kway_split(Rtrain.transpose(), args.k)
+
+    # Transpose user splits back
+    usersplits = [(ofs, split.transpose()) for ofs, split in usersplits]
+
+    if args.verbose:
+        print("Splits by product")
+        for i in range(args.k):
+            P = prodsplits[i][1]
+
+            print("{}x{} (nnz={})".format(*P.shape, P.nnz))
+
+        print()
+        print("Splits by user")
+        for i in range(args.k):
+            U = usersplits[i][1]
+
+            print("{}x{} (nnz={})".format(*U.shape, U.nnz))
+
+    os.makedirs(args.out)
+    np.savetxt(os.path.join(args.out, "users"), users, fmt="%s")
+    np.savetxt(os.path.join(args.out, "products"), products, fmt="%s")
+
+    for i in range(args.k):
+        ppath = os.path.join(args.out, "rank-{}-prod".format(i))
+        savesplit(ppath, *prodsplits[i])
+
+        upath = os.path.join(args.out, "rank-{}-user".format(i))
+        savesplit(upath, *usersplits[i])
+
+    with open(os.path.join(args.out, "test"), "wb") as f:
+        savemat(f, Rtest)
+
+
+if __name__ == "__main__":
+    main()

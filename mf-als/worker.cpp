@@ -23,13 +23,16 @@ Worker::Worker(int id, std::string basepath, int k, int iterations,
 void Worker::run() {
   petuum::PSTableGroup::RegisterThread();
 
-  std::ostringstream path;
-  path << this->basepath << "/rank-" << this->id;
-  struct MatrixData md = MatrixData::parse(path.str());
-  int poffset = md.prodoffset;
-  int uoffset = md.useroffset;
-  auto Rprod = md.Rprod;
-  auto Ruser = md.Ruser;
+  std::ostringstream prodpath;
+  std::ostringstream userpath;
+  prodpath << this->basepath << "/rank-" << this->id << "-prod";
+  userpath << this->basepath << "/rank-" << this->id << "-user";
+  struct MatrixData prodmd = MatrixData::parse(prodpath.str());
+  struct MatrixData usermd = MatrixData::parse(userpath.str());
+  int poffset = prodmd.offset;
+  int uoffset = usermd.offset;
+  auto Rprod = prodmd.R;
+  auto Ruser = usermd.R;
 
   petuum::Table<float> Ptable =
       petuum::PSTableGroup::GetTableOrDie<float>(this->ptableid);

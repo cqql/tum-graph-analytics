@@ -8,10 +8,8 @@
 
 // Parse the split matrix data into armadillo matrices
 struct MatrixData {
-  int prodoffset;
-  int useroffset;
-  arma::sp_fmat Rprod;
-  arma::sp_fmat Ruser;
+  int offset;
+  arma::sp_fmat R;
 
   static struct MatrixData parse(std::string path);
 

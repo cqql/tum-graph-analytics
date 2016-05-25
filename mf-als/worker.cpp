@@ -109,6 +109,7 @@ void Worker::run() {
 
     // Fetch updated P
     P = this->loadmat(Ptable, Ruser.n_rows, this->k);
+    P = arma::clamp(P, 0.0, 5.0);
 
     // Compute gradient for U^T
     arma::fmat UTgrad(Ruser.n_cols, this->k, arma::fill::zeros);
@@ -143,6 +144,7 @@ void Worker::run() {
 
     // Fetch updated U^T
     UT = this->loadmat(Utable, Rprod.n_cols, this->k);
+    UT = arma::clamp(UT, 0.0, 5.0);
 
     step *= 0.9;
 
@@ -180,6 +182,7 @@ void Worker::randomizetable(petuum::Table<float>& table, int m, int n) {
 
   for (int i = 0; i < m; i++) {
     vec.randn();
+    vec = arma::abs(vec);
 
     petuum::DenseUpdateBatch<float> batch(0, n);
     std::memcpy(batch.get_mem(), vec.memptr(), n * sizeof(float));

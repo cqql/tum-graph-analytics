@@ -203,6 +203,9 @@ def main():
         upath = os.path.join(args.out, "rank-{}-user".format(i))
         matrix.savesplit(upath, *usersplits[i])
 
+    with open(os.path.join(args.out, "train"), "wb") as f:
+        matrix.save(f, Rtrain)
+
     with open(os.path.join(args.out, "test"), "wb") as f:
         matrix.save(f, Rtest)
 

@@ -3,22 +3,66 @@
 import argparse
 import math
 import os
-import struct
+import random
 
 import numpy as np
 
+import matrix
 import reviews
 import scipy.sparse
-import sklearn.cross_validation
 
 
-def train_test_split(R, test_size):
+def train_test_split(R, testprop):
     """Split sparse matrix `R` into a training and a test part.
+
+    The algorithm only selects entries for testing that have at least one other
+    nonzero entry in their row as well as in their column. Otherwise if it would
+    for example select a rating from a user that only has a single rating, there
+    would be no data left to train on.
+
+    Parameters
+    ----------
+    R : scipy.sparse.coo_matrix
+        Sparse matrix to split
+    testprop : float
+        Proportion of nonzero entries to split off for testing
+
+    Returns
+    -------
+    Rtrain : scipy.sparse.coo_matrix
+        Training part
+    Rtest : scipy.sparse.coo_matrix
+        Testing part
     """
-    # Split data indices into training and test set
-    train, test = sklearn.cross_validation.train_test_split(
-        np.arange(R.nnz),
-        test_size=test_size)
+    # Clamp to [0, 1]
+    testprop = max(0, min(1, testprop))
+
+    colnnz = R.getnnz(axis=0)
+    rownnz = R.getnnz(axis=1)
+    choices = set(range(R.nnz))
+
+    train = []
+    test = []
+    testn = int(R.nnz * testprop)
+    while len(test) < testn:
+        if len(choices) == 0:
+            raise Exception("Could not select {} test entries".format(testn))
+
+        k = random.sample(choices, 1)[0]
+        choices.remove(k)
+
+        i, j = R.row[k], R.col[k]
+
+        if rownnz[i] > 1 and colnnz[j] > 1:
+            rownnz[i] -= 1
+            colnnz[j] -= 1
+
+            test.append(k)
+        else:
+            train.append(k)
+
+    # Put the rest into the training set
+    train += list(choices)
 
     # Split R accordingly
     Rtrain = scipy.sparse.coo_matrix(
@@ -56,6 +100,7 @@ def kway_split(R, k):
     # CSR was chosen over CSV because it is best suited for selecting rows and
     # slicing along rows.
     R = R.tocsr()
+    rownnz = R.getnnz(axis=1)
 
     # Expected number of nonzero entries per split
     n = R.nnz / k
@@ -72,7 +117,7 @@ def kway_split(R, k):
         while i < R.shape[0]:
             if N < n:
                 split.append(i)
-                N += R.getrow(i).nnz
+                N += rownnz[i]
                 i += 1
             elif len(splits) < k - 1:
                 splits.append((offset, split))
@@ -99,17 +144,6 @@ def kway_split(R, k):
     return splits
 
 
-def savemat(f, mat):
-    f.write(struct.pack("2II", *mat.shape, mat.nnz))
-    f.write(mat.row.astype(np.uint32).tobytes())
-    f.write(mat.col.astype(np.uint32).tobytes())
-    f.write(mat.data.astype(np.float32).tobytes())
-
-
-def savesplit(path, offset, R):
-    with open(path, "wb") as f:
-        f.write(struct.pack("I", offset))
-        savemat(f, R)
 
 
 def main():
@@ -157,13 +191,13 @@ def main():
 
     for i in range(args.k):
         ppath = os.path.join(args.out, "rank-{}-prod".format(i))
-        savesplit(ppath, *prodsplits[i])
+        matrix.savesplit(ppath, *prodsplits[i])
 
         upath = os.path.join(args.out, "rank-{}-user".format(i))
-        savesplit(upath, *usersplits[i])
+        matrix.savesplit(upath, *usersplits[i])
 
     with open(os.path.join(args.out, "test"), "wb") as f:
-        savemat(f, Rtest)
+        matrix.save(f, Rtest)
 
 
 if __name__ == "__main__":

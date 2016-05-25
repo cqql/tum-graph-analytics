@@ -144,7 +144,7 @@ void Worker::run() {
     // Fetch updated U^T
     UT = this->loadmat(Utable, Rprod.n_cols, this->k);
 
-    step /= 2;
+    step *= 0.9;
 
     // Evaluate
     if (this->evalrounds > 0 && (i + 1) % this->evalrounds == 0) {

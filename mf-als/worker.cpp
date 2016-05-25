@@ -163,12 +163,16 @@ void Worker::run() {
   }
 
   // Evaluate (if not evaluated in last round)
-  if (this->id == 0 &&
-      (this->evalrounds <= 0 || this->iterations % this->evalrounds != 0)) {
-    std::cout << "Test => ";
-    this->evaltest(P, UT);
-    std::cout << "Training => ";
-    this->eval(P, UT, Rprod, poffset, 0);
+  if (this->id == 0) {
+    if (this->evalrounds <= 0 || this->iterations % this->evalrounds != 0) {
+      std::cout << "Test => ";
+      this->evaltest(P, UT);
+      std::cout << "Training => ";
+      this->eval(P, UT, Rprod, poffset, 0);
+    }
+
+    P.save("out/P", arma::csv_ascii);
+    UT.save("out/UT", arma::csv_ascii);
   }
 
   LOG(INFO) << "Shutdown worker " << this->id;

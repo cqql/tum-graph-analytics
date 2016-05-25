@@ -39,18 +39,27 @@ def train_test_split(R, testprop):
 
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)
-    choices = set(range(R.nnz))
 
     train = []
     test = []
+    testoptions = []
+
+    for k in list(range(R.nnz)):
+        i, j = R.row[k], R.col[k]
+
+        if rownnz[i] <= 1 or colnnz[j] <= 1:
+            train.append(k)
+        else:
+            testoptions.append(k)
+
+    random.shuffle(testoptions)
+
     testn = int(R.nnz * testprop)
     while len(test) < testn:
-        if len(choices) == 0:
+        if len(testoptions) == 0:
             raise Exception("Could not select {} test entries".format(testn))
 
-        k = random.sample(choices, 1)[0]
-        choices.remove(k)
-
+        k = testoptions.pop()
         i, j = R.row[k], R.col[k]
 
         if rownnz[i] > 1 and colnnz[j] > 1:
@@ -62,7 +71,7 @@ def train_test_split(R, testprop):
             train.append(k)
 
     # Put the rest into the training set
-    train += list(choices)
+    train += testoptions
 
     # Split R accordingly
     Rtrain = scipy.sparse.coo_matrix(
@@ -144,8 +153,6 @@ def kway_split(R, k):
     return splits
 
 
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-v",
@@ -166,7 +173,7 @@ def main():
     products, users, R = reviews.parse(args.data)
     Rtrain, Rtest = train_test_split(R, args.t)
     prodsplits = kway_split(Rtrain, args.k)
-    usersplits = kway_split(Rtrain.transpose(), args.k)
+    usersplits = kway_split(Rtrain.transpose(True), args.k)
 
     # Transpose user splits back
     usersplits = [(ofs, split.transpose()) for ofs, split in usersplits]

@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+
+import argparse
+
+import numpy as np
+
+import matrix
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t",
+                        "--tolerance",
+                        type=float,
+                        default=0.1,
+                        help="Tolerance for correct prediction")
+    parser.add_argument("-R", help="Path to rating matrix")
+    parser.add_argument("-P", help="Path to P factorization")
+    parser.add_argument("-U", help="Path to U^T factorization")
+
+    args = parser.parse_args()
+    tolerance = args.tolerance
+
+    R = matrix.loadfile(args.R)
+    P = np.loadtxt(args.P, delimiter=",")
+    U = np.loadtxt(args.U, delimiter=",").T
+
+    colnnz = R.getnnz(axis=0)
+    rownnz = R.getnnz(axis=1)
+
+    mse = 0
+    correct = 0
+
+    for k in range(R.nnz):
+        i, j = R.row[k], R.col[k]
+        expected = R.data[k]
+        actual = P[i, :].dot(U[:, j])
+        error = abs(expected - actual)
+
+        mse += error * error
+
+        if error <= tolerance:
+            correct += 1
+
+    print("MSE = {}".format(mse / R.nnz))
+    print("Correct {}; Incorrect {}; Recall/Accuracy {:.3f}".format(
+        correct, R.nnz - correct, correct / R.nnz))
+
+
+if __name__ == "__main__":
+    main()

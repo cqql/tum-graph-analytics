@@ -1,0 +1,13 @@
+# Binaries
+bin/
+
+# Regression output files
+.loss
+.stats
+.weight
+
+# Obj files
+.o
+
+# Old version of text files
+~

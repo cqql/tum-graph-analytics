@@ -12,3 +12,11 @@
 
 # MatLab data files
 .dat
+
+# Build artifacts
+libs/bosen
+libs/bosen-third-party
+libs/strads
+
+# Python artifacts
+__pycache__

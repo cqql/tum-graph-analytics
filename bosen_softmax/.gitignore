@@ -7,7 +7,7 @@ bin/
 .weight
 
 # Obj files
-.o
+*.o
 
 # Old version of text files
-~
+*~

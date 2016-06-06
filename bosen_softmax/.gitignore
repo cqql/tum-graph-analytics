@@ -2,9 +2,9 @@
 bin/
 
 # Regression output files
-.loss
-.stats
-.weight
+*.loss
+*.stats
+*.weight
 
 # Obj files
 *.o

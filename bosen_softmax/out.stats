@@ -1,0 +1,9 @@
+Accuracy: 0.073
+Total Samples: 4000
+Wrongly classified: 3708
+Correctly classified: 292
+7 | 5 | 26 | 73 | 242 | 
+51 | 43 | 117 | 358 | 1339 | 
+49 | 24 | 51 | 162 | 769 | 
+17 | 6 | 16 | 36 | 128 | 
+66 | 59 | 93 | 108 | 155 | 

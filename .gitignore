@@ -21,8 +21,6 @@ compile_commands.json
 
 # Build artifacts
 libs/bosen
-libs/bosen-third-party
-libs/strads
 
 # Python artifacts
 __pycache__

@@ -2,6 +2,11 @@
 
 ## Installation
 
+```sh
+# Clone bosen
+git clone https://github.com:petuum/bosen.git libs/bosen
+```
+
 ### Arch Linux
 
 ```sh

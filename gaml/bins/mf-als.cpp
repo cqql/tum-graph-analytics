@@ -1,6 +1,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <thread>
 #include <utility>
@@ -26,9 +27,17 @@ struct MfalsThread {
   std::string path;
   int k;
   int iterations;
+  int minibatch;
+  int seed;
 
-  MfalsThread(int id, std::string path, int k, int iterations)
-      : id(id), path(path), k(k), iterations(iterations) {}
+  MfalsThread(int id, std::string path, int k, int iterations, int minibatch,
+              int seed)
+      : id(id),
+        path(path),
+        k(k),
+        iterations(iterations),
+        minibatch(minibatch),
+        seed(seed) {}
 
   void run() {
     petuum::PSTableGroup::RegisterThread();
@@ -47,7 +56,8 @@ struct MfalsThread {
     auto uSlice = userms.R;
 
     gaml::mf::Worker worker(Table::P, Table::U, this->iterations, this->k,
-                            pOffset, pSlice, uOffset, uSlice);
+                            this->minibatch, std::mt19937(this->seed), pOffset,
+                            pSlice, uOffset, uSlice);
     worker.run();
 
     if (this->id == 1) {
@@ -73,7 +83,11 @@ int main(int argc, char** argv) {
       ("workers", po::value<int>()->default_value(3),
        "Number of workers")
       ("eval-rounds,e", po::value<int>()->default_value(0),
-       "Eval the model every k rounds");
+       "Eval the model every k rounds")
+      ("minibatch,m", po::value<int>()->default_value(0),
+       "Size of minibatch per worker")
+      ("seed", po::value<int>()->default_value(0),
+       "Random seed");
   // clang-format on
 
   po::variables_map vm;
@@ -85,6 +99,8 @@ int main(int argc, char** argv) {
   int num_products = vm["products"].as<int>();
   int num_workers = vm["workers"].as<int>();
   int eval_rounds = vm["eval-rounds"].as<int>();
+  int minibatch = vm["minibatch"].as<int>();
+  int seed = vm["seed"].as<int>();
 
   // Register row types
   petuum::PSTableGroup::RegisterRow<petuum::DenseRow<float>>(RowType::FLOAT);
@@ -114,9 +130,10 @@ int main(int argc, char** argv) {
 
   // Run workers
   for (int i = 0; i < num_workers; i++) {
-    threads[i] = std::thread(&MfalsThread::run,
-                             std::unique_ptr<MfalsThread>(
-                                 new MfalsThread(i, "out", rank, iterations)));
+    threads[i] =
+        std::thread(&MfalsThread::run,
+                    std::unique_ptr<MfalsThread>(new MfalsThread(
+                        i, "out", rank, iterations, minibatch, seed + i)));
   }
 
   for (auto& thread : threads) {

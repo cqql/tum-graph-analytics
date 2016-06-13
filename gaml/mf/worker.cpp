@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <numeric>
+
 #include <petuum_ps_common/include/petuum_ps.hpp>
 
 #include "worker.h"
@@ -10,6 +13,7 @@ void Worker::run() {
   const int k = this->k;
   const auto pSlice = this->pSlice;
   const auto uSlice = this->uSlice;
+  const int mbSize = this->minibatch;
 
   petuum::Table<float> pTable =
       petuum::PSTableGroup::GetTableOrDie<float>(this->pTableId);
@@ -32,16 +36,23 @@ void Worker::run() {
     // Compute gradient for P
     arma::fmat pGrad(pSlice.n_rows, k, arma::fill::zeros);
 
+    std::vector<int> mbIndices = this->selectMinibatch(pSlice, mbSize);
     arma::sp_fmat::const_iterator start = pSlice.begin();
     arma::sp_fmat::const_iterator end = pSlice.end();
-    for (arma::sp_fmat::const_iterator it = start; it != end; ++it) {
-      int row = it.row();
-      int col = it.col();
+    arma::sp_fmat::const_iterator it = start;
+    for (int i = 0, j = 0; it != end && (mbSize == 0 || j < mbSize);
+         ++it, ++i) {
+      if (i == mbIndices[j]) {
+        ++j;
 
-      float diff = arma::dot(P.row(row + pOffset), UT.row(col)) - (*it);
+        int row = it.row();
+        int col = it.col();
 
-      for (int x = 0; x < k; x++) {
-        pGrad(row, x) += 2 * UT(col, x) * diff;
+        float diff = arma::dot(P.row(row + pOffset), UT.row(col)) - (*it);
+
+        for (int x = 0; x < k; x++) {
+          pGrad(row, x) += 2 * UT(col, x) * diff;
+        }
       }
     }
 
@@ -67,16 +78,23 @@ void Worker::run() {
     // Compute gradient for U^T
     arma::fmat utGrad(uSlice.n_cols, k, arma::fill::zeros);
 
+    mbIndices = this->selectMinibatch(uSlice, mbSize);
     start = uSlice.begin();
     end = uSlice.end();
-    for (arma::sp_fmat::const_iterator it = start; it != end; ++it) {
-      int row = it.row();
-      int col = it.col();
+    it = start;
+    for (int i = 0, j = 0; it != end && (mbSize == 0 || j < mbSize);
+         ++it, ++i) {
+      if (i == mbIndices[j]) {
+        ++j;
 
-      float diff = arma::dot(P.row(row), UT.row(col + uOffset)) - (*it);
+        int row = it.row();
+        int col = it.col();
 
-      for (int x = 0; x < k; x++) {
-        utGrad(col, x) += 2 * P(row, x) * diff;
+        float diff = arma::dot(P.row(row), UT.row(col + uOffset)) - (*it);
+
+        for (int x = 0; x < k; x++) {
+          utGrad(col, x) += 2 * P(row, x) * diff;
+        }
       }
     }
 
@@ -164,6 +182,23 @@ arma::fmat Worker::loadMatrix(petuum::Table<float>& table, int m, int n) {
   }
 
   return M;
+}
+
+std::vector<int> Worker::selectMinibatch(const arma::sp_fmat& M,
+                                         const int mbSize) {
+  std::vector<int> indices(M.n_nonzero);
+  std::iota(indices.begin(), indices.end(), 0);
+
+  if (mbSize > 0) {
+    std::shuffle(indices.begin(), indices.end(), this->rng);
+
+    std::vector<int> minibatch(&indices[0], &indices[mbSize]);
+    std::sort(minibatch.begin(), minibatch.end());
+
+    return minibatch;
+  } else {
+    return indices;
+  }
 }
 }
 }

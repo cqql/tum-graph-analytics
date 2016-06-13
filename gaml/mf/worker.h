@@ -1,6 +1,9 @@
 #ifndef GAML_MF_WORKER_H_
 #define GAML_MF_WORKER_H_
 
+#include <random>
+#include <vector>
+
 #include <armadillo>
 
 namespace gaml {
@@ -18,12 +21,15 @@ class Worker {
   arma::fmat P;
   arma::fmat UT;
 
-  Worker(int pTableId, int uTableId, int iterations, int k, int pOffset,
-         arma::sp_fmat pSlice, int uOffset, arma::sp_fmat uSlice)
+  Worker(int pTableId, int uTableId, int iterations, int k, int minibatch,
+         std::mt19937 rng, int pOffset, arma::sp_fmat pSlice, int uOffset,
+         arma::sp_fmat uSlice)
       : pTableId(pTableId),
         uTableId(uTableId),
         iterations(iterations),
         k(k),
+        minibatch(minibatch),
+        rng(rng),
         pOffset(pOffset),
         pSlice(pSlice),
         uOffset(uOffset),
@@ -39,6 +45,8 @@ class Worker {
   const int uTableId;
   const int iterations;
   const int k;
+  const int minibatch;
+  std::mt19937 rng;
 
   // Slice of R along the P side
   const int pOffset;
@@ -57,6 +65,11 @@ class Worker {
    * Load the complete n*m table as an m*n matrix
    */
   arma::fmat loadMatrix(petuum::Table<float>& table, int m, int n);
+
+  /**
+   * Select sorted subset indices into elements of M of size mbsize
+   */
+  std::vector<int> selectMinibatch(const arma::sp_fmat& M, const int mbSize);
 };
 }
 }

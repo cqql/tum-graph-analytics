@@ -14,6 +14,8 @@
 #include <petuum_ps_common/include/petuum_ps.hpp>
 
 #include "../io/matrix_slice.h"
+#include "../mf/r_projection.h"
+#include "../mf/nn_projection.h"
 #include "../mf/worker.h"
 
 enum RowType { FLOAT };
@@ -56,8 +58,9 @@ struct MfalsThread {
     auto uSlice = userms.R;
 
     gaml::mf::Worker worker(Table::P, Table::U, this->iterations, this->k,
-                            this->minibatch, std::mt19937(this->seed), pOffset,
-                            pSlice, uOffset, uSlice);
+                            this->minibatch, std::mt19937(this->seed),
+                            gaml::mf::NNProjection(), pOffset, pSlice, uOffset,
+                            uSlice);
     worker.run();
 
     if (this->id == 1) {

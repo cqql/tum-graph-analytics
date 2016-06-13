@@ -6,6 +6,8 @@
 
 #include <armadillo>
 
+#include "projection.h"
+
 namespace gaml {
 
 namespace mf {
@@ -22,14 +24,15 @@ class Worker {
   arma::fmat UT;
 
   Worker(int pTableId, int uTableId, int iterations, int k, int minibatch,
-         std::mt19937 rng, int pOffset, arma::sp_fmat pSlice, int uOffset,
-         arma::sp_fmat uSlice)
+         std::mt19937 rng, const Projection& projection, int pOffset,
+         arma::sp_fmat pSlice, int uOffset, arma::sp_fmat uSlice)
       : pTableId(pTableId),
         uTableId(uTableId),
         iterations(iterations),
         k(k),
         minibatch(minibatch),
         rng(rng),
+        projection(projection),
         pOffset(pOffset),
         pSlice(pSlice),
         uOffset(uOffset),
@@ -47,6 +50,7 @@ class Worker {
   const int k;
   const int minibatch;
   std::mt19937 rng;
+  const Projection& projection;
 
   // Slice of R along the P side
   const int pOffset;

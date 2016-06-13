@@ -73,7 +73,9 @@ void Worker::run() {
 
     // Fetch updated P
     P = this->loadMatrix(pTable, uSlice.n_rows, k);
-    P = arma::clamp(P, 0.0, 5.0);
+
+    // Project factor
+    P = this->projection.project(P);
 
     // Compute gradient for U^T
     arma::fmat utGrad(uSlice.n_cols, k, arma::fill::zeros);
@@ -115,7 +117,9 @@ void Worker::run() {
 
     // Fetch updated U^T
     UT = this->loadMatrix(utTable, pSlice.n_cols, k);
-    UT = arma::clamp(UT, 0.0, 5.0);
+
+    // Project factor
+    UT = this->projection.project(UT);
 
     step *= 0.9;
   }

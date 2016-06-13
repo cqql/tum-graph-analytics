@@ -30,7 +30,8 @@ set(gaml_LIBRARIES petuum_bosen ${Bosen_LIBRARIES} ${Boost_LIBRARIES}
   ${ARMADILLO_LIBRARIES})
 
 # List all source files
-set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp)
+set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
+  gaml/mf/r_projection.cpp gaml/mf/nn_projection.cpp)
 
 add_executable(mf-als gaml/bins/mf-als.cpp ${gaml_SRCS})
 target_link_libraries(mf-als ${gaml_LIBRARIES})

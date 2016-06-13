@@ -4,6 +4,9 @@ CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
 
+# Bosen repo
+libs/bosen
+
 # Jupyter checkpoints
 .ipynb_checkpoints
 
@@ -20,7 +23,7 @@ compile_commands.json
 .dat
 
 # Build artifacts
-libs/bosen
+mf-als
 
 # Python artifacts
 __pycache__

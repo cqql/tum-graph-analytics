@@ -12,14 +12,52 @@
 #include <glog/logging.h>
 #include <petuum_ps_common/include/petuum_ps.hpp>
 
-#include "matrix_data.h"
-#include "worker.h"
+#include "../io/matrix_slice.h"
+#include "../mf/worker.h"
 
 enum RowType { FLOAT };
 
 enum Table { P, U };
 
 namespace po = boost::program_options;
+
+struct MfalsThread {
+  int id;
+  std::string path;
+  int k;
+  int iterations;
+
+  MfalsThread(int id, std::string path, int k, int iterations)
+      : id(id), path(path), k(k), iterations(iterations) {}
+
+  void run() {
+    petuum::PSTableGroup::RegisterThread();
+
+    std::ostringstream prodpath;
+    std::ostringstream userpath;
+    prodpath << this->path << "/rank-" << this->id << "-prod";
+    userpath << this->path << "/rank-" << this->id << "-user";
+    struct gaml::io::MatrixSlice prodms =
+        gaml::io::MatrixSlice::parse(prodpath.str());
+    struct gaml::io::MatrixSlice userms =
+        gaml::io::MatrixSlice::parse(userpath.str());
+    int pOffset = prodms.offset;
+    int uOffset = userms.offset;
+    auto pSlice = prodms.R;
+    auto uSlice = userms.R;
+
+    gaml::mf::Worker worker(Table::P, Table::U, this->iterations, this->k,
+                            pOffset, pSlice, uOffset, uSlice);
+    worker.run();
+
+    if (this->id == 1) {
+      worker.P.save("out/P", arma::csv_ascii);
+      worker.UT.save("out/UT", arma::csv_ascii);
+    }
+
+    petuum::PSTableGroup::DeregisterThread();
+  }
+};
 
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
@@ -67,33 +105,8 @@ int main(int argc, char** argv) {
   petuum::PSTableGroup::Init(table_group_config, false);
 
   // Create tables
-  petuum::ClientTableConfig p_config;
-  p_config.table_info.row_type = RowType::FLOAT;
-  p_config.table_info.row_capacity = num_products;
-  p_config.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
-  p_config.table_info.table_staleness = 0;
-  p_config.table_info.oplog_dense_serialized = true;
-  p_config.table_info.dense_row_oplog_capacity =
-      p_config.table_info.row_capacity;
-  p_config.process_cache_capacity = rank;
-  p_config.oplog_capacity = rank;
-  p_config.thread_cache_capacity = 1;
-  p_config.process_storage_type = petuum::BoundedDense;
-  petuum::PSTableGroup::CreateTable((int)Table::P, p_config);
-
-  petuum::ClientTableConfig u_config;
-  u_config.table_info.row_type = RowType::FLOAT;
-  u_config.table_info.row_capacity = num_users;
-  u_config.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
-  u_config.table_info.table_staleness = 0;
-  u_config.table_info.oplog_dense_serialized = true;
-  u_config.table_info.dense_row_oplog_capacity =
-      u_config.table_info.row_capacity;
-  u_config.process_cache_capacity = rank;
-  u_config.oplog_capacity = rank;
-  u_config.thread_cache_capacity = 1;
-  u_config.process_storage_type = petuum::BoundedDense;
-  petuum::PSTableGroup::CreateTable((int)Table::U, u_config);
+  gaml::mf::Worker::initTables(Table::P, Table::U, RowType::FLOAT, rank,
+                               num_products, num_users);
 
   petuum::PSTableGroup::CreateTableDone();
 
@@ -101,21 +114,17 @@ int main(int argc, char** argv) {
 
   // Run workers
   for (int i = 0; i < num_workers; i++) {
-    threads[i] = std::thread(
-        &mfals::Worker::run,
-        std::unique_ptr<mfals::Worker>(new mfals::Worker(
-            i, "out", rank, iterations, eval_rounds, Table::P, Table::U)));
+    threads[i] = std::thread(&MfalsThread::run,
+                             std::unique_ptr<MfalsThread>(
+                                 new MfalsThread(i, "out", rank, iterations)));
   }
 
   for (auto& thread : threads) {
     thread.join();
-    LOG(INFO) << "Join";
   }
 
   // Finalize
   petuum::PSTableGroup::ShutDown();
-
-  LOG(INFO) << "Shutdown";
 
   return 0;
 }

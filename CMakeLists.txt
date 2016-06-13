@@ -29,5 +29,11 @@ find_package(Boost COMPONENTS system program_options)
 set(gaml_LIBRARIES petuum_bosen ${Bosen_LIBRARIES} ${Boost_LIBRARIES}
   ${ARMADILLO_LIBRARIES})
 
+# List all source files
+set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp)
+
 # Load our subprojects
-add_subdirectory(mf-als)
+# add_subdirectory(mf-als)
+
+add_executable(mf-als gaml/bins/mf-als.cpp ${gaml_SRCS})
+target_link_libraries(mf-als ${gaml_LIBRARIES})

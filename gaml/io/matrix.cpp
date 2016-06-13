@@ -1,26 +1,12 @@
-#include <fstream>
+#include <vector>
 
-#include <armadillo>
+#include "matrix.h"
 
-#include "matrix_data.h"
+namespace gaml {
 
-// Parse the split matrix data into armadillo matrices
-struct MatrixData MatrixData::parse(std::string path) {
-  struct MatrixData md;
-  std::ifstream f(path, std::ios::binary);
+namespace io {
 
-  if (!f.is_open()) {
-    std::cout << path << std::endl;
-    throw std::invalid_argument("Could not open file");
-  }
-
-  f.read(reinterpret_cast<char*>(&md.offset), sizeof(int));
-  md.R = MatrixData::parsemat(f);
-
-  return md;
-}
-
-arma::sp_fmat MatrixData::parsemat(std::ifstream& f) {
+arma::sp_fmat Matrix::fromStream(std::ifstream& f) {
   int m;
   int n;
   int nnz;
@@ -48,4 +34,6 @@ arma::sp_fmat MatrixData::parsemat(std::ifstream& f) {
   arma::umat locations = arma::join_cols(rows, cols);
 
   return arma::sp_fmat(locations, arma::fvec(vals), m, n);
+}
+}
 }

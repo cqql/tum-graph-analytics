@@ -3,6 +3,7 @@ CMakeFiles
 CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
+Makefile
 
 # Bosen repo
 libs/bosen

@@ -1,5 +1,5 @@
-#ifndef PROJECTION_H_
-#define PROJECTION_H_
+#ifndef GAML_MF_GD_PROJECTION_H_
+#define GAML_MF_GD_PROJECTION_H_
 
 #include <armadillo>
 
@@ -7,11 +7,14 @@ namespace gaml {
 
 namespace mf {
 
+namespace gd {
+
 class Projection {
  public:
   virtual arma::fmat project(arma::fmat) const = 0;
 };
 }
 }
+}
 
-#endif  // PROJECTION_H_
+#endif  // GAML_MF_GD_PROJECTION_H_

@@ -1,5 +1,5 @@
-#ifndef GAML_MF_WORKER_H_
-#define GAML_MF_WORKER_H_
+#ifndef GAML_MF_GD_WORKER_H_
+#define GAML_MF_GD_WORKER_H_
 
 #include <random>
 #include <vector>
@@ -11,6 +11,8 @@
 namespace gaml {
 
 namespace mf {
+
+namespace gd {
 
 /**
  * Bosen worker for matrix factorization
@@ -77,5 +79,6 @@ class Worker {
 };
 }
 }
+}
 
-#endif  // GAML_MF_WORKER_H_
+#endif  // GAML_MF_GD_WORKER_H_

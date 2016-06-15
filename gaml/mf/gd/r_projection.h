@@ -1,5 +1,5 @@
-#ifndef R_PROJECTION_H_
-#define R_PROJECTION_H_
+#ifndef GAML_MF_GD_R_PROJECTION_H_
+#define GAML_MF_GD_R_PROJECTION_H_
 
 #include "projection.h"
 
@@ -7,10 +7,13 @@ namespace gaml {
 
 namespace mf {
 
+namespace gd {
+
 class RProjection : public Projection {
   arma::fmat project(arma::fmat A) const;
 };
 }
 }
+}
 
-#endif  // R_PROJECTION_H_
+#endif  // GAML_MF_GD_R_PROJECTION_H_

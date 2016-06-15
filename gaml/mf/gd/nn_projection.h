@@ -1,11 +1,13 @@
-#ifndef NN_PROJECTION_H_
-#define NN_PROJECTION_H_
+#ifndef GAML_MF_GD_NN_PROJECTION_H_
+#define GAML_MF_GD_NN_PROJECTION_H_
 
 #include "projection.h"
 
 namespace gaml {
 
 namespace mf {
+
+namespace gd {
 
 /**
  * Non-negative projection
@@ -15,5 +17,6 @@ class NNProjection : public Projection {
 };
 }
 }
+}
 
-#endif  // NN_PROJECTION_H_
+#endif  // GAML_MF_GD_NN_PROJECTION_H_

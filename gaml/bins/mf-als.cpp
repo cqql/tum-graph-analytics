@@ -14,9 +14,8 @@
 #include <petuum_ps_common/include/petuum_ps.hpp>
 
 #include "../io/matrix_slice.h"
-#include "../mf/r_projection.h"
-#include "../mf/nn_projection.h"
-#include "../mf/worker.h"
+#include "../mf/gd/nn_projection.h"
+#include "../mf/gd/worker.h"
 
 enum RowType { FLOAT };
 
@@ -57,10 +56,10 @@ struct MfalsThread {
     auto pSlice = prodms.R;
     auto uSlice = userms.R;
 
-    gaml::mf::Worker worker(Table::P, Table::U, this->iterations, this->k,
-                            this->minibatch, std::mt19937(this->seed),
-                            gaml::mf::NNProjection(), pOffset, pSlice, uOffset,
-                            uSlice);
+    gaml::mf::gd::Worker worker(Table::P, Table::U, this->iterations, this->k,
+                                this->minibatch, std::mt19937(this->seed),
+                                gaml::mf::gd::NNProjection(), pOffset, pSlice,
+                                uOffset, uSlice);
     worker.run();
 
     if (this->id == 1) {
@@ -124,8 +123,8 @@ int main(int argc, char** argv) {
   petuum::PSTableGroup::Init(table_group_config, false);
 
   // Create tables
-  gaml::mf::Worker::initTables(Table::P, Table::U, RowType::FLOAT, rank,
-                               num_products, num_users);
+  gaml::mf::gd::Worker::initTables(Table::P, Table::U, RowType::FLOAT, rank,
+                                   num_products, num_users);
 
   petuum::PSTableGroup::CreateTableDone();
 

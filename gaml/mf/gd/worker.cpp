@@ -9,6 +9,8 @@ namespace gaml {
 
 namespace mf {
 
+namespace gd {
+
 void Worker::run() {
   const int k = this->k;
   const auto pSlice = this->pSlice;
@@ -203,6 +205,7 @@ std::vector<int> Worker::selectMinibatch(const arma::sp_fmat& M,
   } else {
     return indices;
   }
+}
 }
 }
 }

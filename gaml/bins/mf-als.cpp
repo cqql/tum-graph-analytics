@@ -56,15 +56,16 @@ struct MfalsThread {
     auto pSlice = prodms.R;
     auto uSlice = userms.R;
 
-    gaml::mf::gd::Worker worker(Table::P, Table::U, this->iterations, this->k,
+    gaml::mf::gd::Worker worker(Table::P, Table::U, this->iterations,
                                 this->minibatch, std::mt19937(this->seed),
-                                gaml::mf::gd::NNProjection(), pOffset, pSlice,
-                                uOffset, uSlice);
-    worker.run();
+                                gaml::mf::gd::NNProjection());
+    auto factors = worker.factor(pSlice, pOffset, uSlice, uOffset, this->k);
+    auto P = std::get<0>(factors);
+    auto UT = std::get<1>(factors);
 
     if (this->id == 1) {
-      worker.P.save("out/P", arma::csv_ascii);
-      worker.UT.save("out/UT", arma::csv_ascii);
+      P.save("out/P", arma::csv_ascii);
+      UT.save("out/UT", arma::csv_ascii);
     }
 
     petuum::PSTableGroup::DeregisterThread();

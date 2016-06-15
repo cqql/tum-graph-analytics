@@ -1,8 +1,6 @@
 #include <algorithm>
 #include <numeric>
 
-#include <petuum_ps_common/include/petuum_ps.hpp>
-
 #include "worker.h"
 
 namespace gaml {
@@ -11,20 +9,18 @@ namespace mf {
 
 namespace gd {
 
-void Worker::run() {
-  const int k = this->k;
-  const auto pSlice = this->pSlice;
-  const auto uSlice = this->uSlice;
+std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
+                                                  const int pOffset,
+                                                  const arma::sp_fmat uSlice,
+                                                  const int uOffset,
+                                                  const int k) {
   const int mbSize = this->minibatch;
-
-  petuum::Table<float> pTable =
-      petuum::PSTableGroup::GetTableOrDie<float>(this->pTableId);
-  petuum::Table<float> utTable =
-      petuum::PSTableGroup::GetTableOrDie<float>(this->uTableId);
+  auto pTable = this->pTable;
+  auto utTable = this->utTable;
 
   // Randomly initialize the factors
-  this->randomizeTable(pTable, k, pSlice.n_rows, this->pOffset);
-  this->randomizeTable(utTable, k, uSlice.n_cols, this->uOffset);
+  this->randomizeTable(pTable, k, pSlice.n_rows, pOffset);
+  this->randomizeTable(utTable, k, uSlice.n_cols, uOffset);
 
   petuum::PSTableGroup::GlobalBarrier();
 
@@ -126,8 +122,7 @@ void Worker::run() {
     step *= 0.9;
   }
 
-  this->P = P;
-  this->UT = UT;
+  return {P, UT};
 }
 
 void Worker::initTables(int pTableId, int uTableId, int rowType, int k,
@@ -159,35 +154,6 @@ void Worker::initTables(int pTableId, int uTableId, int rowType, int k,
   u_config.thread_cache_capacity = 1;
   u_config.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(uTableId, u_config);
-}
-
-void Worker::randomizeTable(petuum::Table<float> table, int m, int n,
-                            int offset) {
-  arma::fvec vec(n);
-
-  for (int i = 0; i < m; i++) {
-    vec.randn();
-    vec = arma::abs(vec);
-
-    petuum::DenseUpdateBatch<float> batch(offset, n);
-    std::memcpy(batch.get_mem(), vec.memptr(), n * sizeof(float));
-
-    table.DenseBatchInc(i, batch);
-  }
-}
-
-arma::fmat Worker::loadMatrix(petuum::Table<float>& table, int m, int n) {
-  arma::fmat M(m, n);
-  petuum::RowAccessor rowacc;
-
-  for (int i = 0; i < n; i++) {
-    std::vector<float> tmp;
-    const auto& col = table.Get<petuum::DenseRow<float>>(i, &rowacc);
-    col.CopyToVector(&tmp);
-    std::memcpy(M.colptr(i), tmp.data(), sizeof(float) * m);
-  }
-
-  return M;
 }
 
 std::vector<int> Worker::selectMinibatch(const arma::sp_fmat& M,

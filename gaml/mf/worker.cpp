@@ -21,13 +21,13 @@ void Worker::randomizeTable(petuum::Table<float>& table, int m, int n,
 
 arma::fmat Worker::loadMatrix(petuum::Table<float>& table, int m, int n) {
   arma::fmat M(m, n);
+  std::vector<float> buf(m);
   petuum::RowAccessor rowacc;
 
   for (int i = 0; i < n; i++) {
-    std::vector<float> tmp;
     const auto& col = table.Get<petuum::DenseRow<float>>(i, &rowacc);
-    col.CopyToVector(&tmp);
-    std::memcpy(M.colptr(i), tmp.data(), sizeof(float) * m);
+    col.CopyToVector(&buf);
+    std::memcpy(M.colptr(i), buf.data(), m * sizeof(float));
   }
 
   return M;

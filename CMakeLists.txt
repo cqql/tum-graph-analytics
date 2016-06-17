@@ -31,7 +31,8 @@ set(gaml_LIBRARIES petuum_bosen ${Bosen_LIBRARIES} ${Boost_LIBRARIES}
 
 # List all source files
 set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
-  gaml/mf/gd/worker.cpp gaml/mf/gd/r_projection.cpp gaml/mf/gd/nn_projection.cpp)
+  gaml/mf/gd/worker.cpp gaml/mf/gd/r_projection.cpp gaml/mf/gd/nn_projection.cpp
+  gaml/mf/als/worker.cpp gaml/mf/als/logger.cpp)
 
 add_executable(mf-als gaml/bins/mf-als.cpp ${gaml_SRCS})
 target_link_libraries(mf-als ${gaml_LIBRARIES})

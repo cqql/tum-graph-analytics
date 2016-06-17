@@ -90,6 +90,7 @@ int main(int argc, char** argv) {
   po::options_description options;
   // clang-format off
   options.add_options()
+      ("data", po::value<std::string>(), "Path to split data")
       ("clients", po::value<int>()->default_value(1), "Number of clients")
       ("id", po::value<int>()->default_value(0), "This client's ID")
       ("workers", po::value<int>()->default_value(3),
@@ -116,6 +117,7 @@ int main(int argc, char** argv) {
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, options), vm);
 
+  std::string datapath = vm["data"].as<std::string>();
   int client_id = vm["id"].as<int>();
   int num_clients = vm["clients"].as<int>();
   int num_workers = vm["workers"].as<int>();
@@ -162,10 +164,10 @@ int main(int argc, char** argv) {
   for (int i = 0; i < num_workers; i++) {
     int rank = client_id * num_workers + i;
 
-    threads[i] = std::thread(
-        &MfalsThread::run, std::unique_ptr<MfalsThread>(new MfalsThread(
-                               nranks, rank, i, "out", k, iterations, minibatch,
-                               seed + i, atol, rtol, alpha)));
+    threads[i] = std::thread(&MfalsThread::run,
+                             std::unique_ptr<MfalsThread>(new MfalsThread(
+                                 nranks, rank, i, datapath, k, iterations,
+                                 minibatch, seed + i, atol, rtol, alpha)));
   }
 
   for (auto& thread : threads) {

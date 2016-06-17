@@ -22,8 +22,8 @@ def main():
     tolerance = args.tolerance
 
     R = matrix.loadfile(args.R)
-    P = np.loadtxt(args.P, delimiter=",")
-    U = np.loadtxt(args.U, delimiter=",").T
+    P = np.loadtxt(args.P, delimiter=",", ndmin=2)
+    U = np.loadtxt(args.U, delimiter=",", ndmin=2).T
 
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)

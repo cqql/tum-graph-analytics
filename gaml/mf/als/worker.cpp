@@ -63,7 +63,7 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
 
     const arma::fmat UTnew = this->solver->solve(P, uSlice).t();
     const arma::fmat UTupdate =
-        (UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1));
+        UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1);
 
     // Update U table
     this->updateMatrixSlice(UTupdate, utTable, uSlice.n_cols, k, uOffset);

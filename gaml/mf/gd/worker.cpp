@@ -25,8 +25,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
   petuum::PSTableGroup::GlobalBarrier();
 
   // Fetch the initial values
-  auto P = this->loadMatrix(pTable, uSlice.n_rows, k);
-  auto UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+  arma::fmat P = this->loadMatrix(pTable, uSlice.n_rows, k);
+  arma::fmat UT = this->loadMatrix(utTable, pSlice.n_cols, k);
 
   float step = 1.0;
 

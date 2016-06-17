@@ -26,13 +26,13 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
   petuum::PSTableGroup::GlobalBarrier();
 
   // Fetch the initial values
-  auto P = this->loadMatrix(pTable, uSlice.n_rows, k);
-  auto UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+  arma::fmat P = this->loadMatrix(pTable, uSlice.n_rows, k);
+  arma::fmat UT = this->loadMatrix(utTable, pSlice.n_cols, k);
 
   // We want to access the rows of pSlice directly in the loop which is
   // preferably done by accessing the columns of the transposed version due to
   // the CCS storage format
-  const auto pSliceT = pSlice.t().eval();
+  const arma::sp_fmat pSliceT = pSlice.t();
 
   float prevSE = 0.0;
   float prevMSE = 0.0;
@@ -46,12 +46,9 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     /////////////////////
     // Update P
 
-    // Eval this because armadillo throws an error otherwise
-    auto Pnew = this->solver->solve(UT, pSliceT).t().eval();
-    // Eval this for colptr()
-    auto Pupdate =
-        (Pnew - P.submat(pOffset, 0, pOffset + pSlice.n_rows - 1, k - 1))
-            .eval();
+    const arma::fmat Pnew = this->solver->solve(UT, pSliceT).t();
+    const arma::fmat Pupdate =
+        (Pnew - P.submat(pOffset, 0, pOffset + pSlice.n_rows - 1, k - 1));
 
     // Update P table
     this->updateMatrixSlice(Pupdate, pTable, pSlice.n_rows, k, pOffset);
@@ -64,12 +61,9 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     ////////////////////
     // Update U^T
 
-    // Eval this because armadillo throws an error otherwise
-    auto UTnew = this->solver->solve(P, uSlice).t().eval();
-    // Eval this for colptr()
-    auto UTupdate =
-        (UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1))
-            .eval();
+    const arma::fmat UTnew = this->solver->solve(P, uSlice).t();
+    const arma::fmat UTupdate =
+        (UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1));
 
     // Update U table
     this->updateMatrixSlice(UTupdate, utTable, uSlice.n_cols, k, uOffset);
@@ -99,7 +93,7 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch all updated SEs
-    const auto SEs = this->loadMatrix(this->seTable, this->nranks, 2);
+    const arma::fmat SEs = this->loadMatrix(this->seTable, this->nranks, 2);
 
     // Compute MSE
     const float mse = arma::sum(SEs.col(0)) / arma::sum(SEs.col(1));

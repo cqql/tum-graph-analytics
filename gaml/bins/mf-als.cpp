@@ -35,9 +35,11 @@ struct MfalsThread {
   int seed;
   float atol;
   float rtol;
+  float alpha;
 
   MfalsThread(int nranks, int rank, int localRank, std::string path, int k,
-              int iterations, int minibatch, int seed, float atol, float rtol)
+              int iterations, int minibatch, int seed, float atol, float rtol,
+              float alpha)
       : nranks(nranks),
         rank(rank),
         localRank(localRank),
@@ -47,7 +49,8 @@ struct MfalsThread {
         minibatch(minibatch),
         seed(seed),
         atol(atol),
-        rtol(rtol) {}
+        rtol(rtol),
+        alpha(alpha) {}
 
   void run() {
     petuum::PSTableGroup::RegisterThread();
@@ -66,7 +69,8 @@ struct MfalsThread {
     auto uSlice = userms.R;
 
     gaml::mf::als::Worker worker(Table::P, Table::U, Table::SE, this->nranks,
-                                 this->rank, this->atol, this->rtol);
+                                 this->rank, this->atol, this->rtol,
+                                 this->alpha);
     auto factors = worker.factor(pSlice, pOffset, uSlice, uOffset, this->k);
     auto P = std::get<0>(factors);
     auto UT = std::get<1>(factors);
@@ -104,7 +108,9 @@ int main(int argc, char** argv) {
       ("atol", po::value<float>()->default_value(0.01),
        "Minimum absolute MSE improvement before termination")
       ("rtol", po::value<float>()->default_value(0.01),
-       "Minimum relative MSE improvement before termination");
+       "Minimum relative MSE improvement before termination")
+      ("alpha", po::value<float>()->default_value(1.0),
+       "Ridge regression weight");
   // clang-format on
 
   po::variables_map vm;
@@ -122,6 +128,7 @@ int main(int argc, char** argv) {
   int seed = vm["seed"].as<int>();
   float atol = vm["atol"].as<float>();
   float rtol = vm["rtol"].as<float>();
+  float alpha = vm["alpha"].as<float>();
 
   int nranks = num_clients * num_workers;
 
@@ -158,7 +165,7 @@ int main(int argc, char** argv) {
     threads[i] = std::thread(
         &MfalsThread::run, std::unique_ptr<MfalsThread>(new MfalsThread(
                                nranks, rank, i, "out", k, iterations, minibatch,
-                               seed + i, atol, rtol)));
+                               seed + i, atol, rtol, alpha)));
   }
 
   for (auto& thread : threads) {

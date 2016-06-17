@@ -4,6 +4,7 @@
 #include "../worker.h"
 #include "logger.h"
 #include "pseudo_inverse_solver.h"
+#include "ridge_regression_solver.h"
 
 namespace gaml {
 
@@ -14,14 +15,15 @@ namespace als {
 class Worker : public gaml::mf::Worker {
  public:
   Worker(const int pTableId, const int uTableId, const int seTableId,
-         const int nranks, const int rank, const float atol, const float rtol)
+         const int nranks, const int rank, const float atol, const float rtol,
+         const float alpha)
       : gaml::mf::Worker(pTableId, uTableId),
         seTable(petuum::PSTableGroup::GetTableOrDie<float>(seTableId)),
         nranks(nranks),
         rank(rank),
         atol(atol),
         rtol(rtol),
-        solver(new PseudoInverseSolver()){}
+        solver(new RidgeRegressionSolver(alpha)) {}
 
   std::tuple<arma::fmat, arma::fmat> factor(const arma::sp_fmat pSlice,
                                             const int pOffset,
@@ -29,8 +31,7 @@ class Worker : public gaml::mf::Worker {
                                             const int uOffset, const int k);
 
   static void initTables(int pTableId, int uTableId, int rowType, int k,
-                         int pNumRows, int uNumRows, int seTableId,
-                         int nranks);
+                         int pNumRows, int uNumRows, int seTableId, int nranks);
 
  private:
   petuum::Table<float> seTable;

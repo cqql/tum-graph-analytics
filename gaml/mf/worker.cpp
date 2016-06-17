@@ -33,9 +33,9 @@ arma::fmat Worker::loadMatrix(petuum::Table<float>& table, int m, int n) {
   return M;
 }
 
-arma::fmat Worker::updateMatrixSlice(const arma::fmat& update,
-                                     petuum::Table<float>& table, int m, int n,
-                                     int offset) {
+void Worker::updateMatrixSlice(const arma::fmat& update,
+                               petuum::Table<float>& table, int m, int n,
+                               int offset) {
   for (int j = 0; j < n; j++) {
     petuum::DenseUpdateBatch<float> batch(offset, m);
 

@@ -46,9 +46,8 @@ class Worker {
    * `update` is an m*n matrix and it is applied to `table` with an offset from
    * the left of `offset`.
    */
-  arma::fmat updateMatrixSlice(const arma::fmat& update,
-                               petuum::Table<float>& table, int m, int n,
-                               int offset);
+  void updateMatrixSlice(const arma::fmat& update, petuum::Table<float>& table,
+                         int m, int n, int offset);
 };
 }
 }

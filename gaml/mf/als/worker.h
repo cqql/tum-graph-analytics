@@ -3,6 +3,7 @@
 
 #include "../worker.h"
 #include "logger.h"
+#include "pseudo_inverse_solver.h"
 
 namespace gaml {
 
@@ -19,7 +20,8 @@ class Worker : public gaml::mf::Worker {
         nranks(nranks),
         rank(rank),
         atol(atol),
-        rtol(rtol) {}
+        rtol(rtol),
+        solver(new PseudoInverseSolver()){}
 
   std::tuple<arma::fmat, arma::fmat> factor(const arma::sp_fmat pSlice,
                                             const int pOffset,
@@ -37,6 +39,7 @@ class Worker : public gaml::mf::Worker {
   const float atol;
   const float rtol;
   Logger logger;
+  std::unique_ptr<Solver> solver;
 };
 }
 }

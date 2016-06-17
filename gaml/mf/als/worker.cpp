@@ -46,33 +46,15 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     /////////////////////
     // Update P
 
-    arma::fmat Pnew(pSlice.n_rows, k);
-
-    for (int i = 0; i < pSlice.n_rows; i++) {
-      // Number of non-zero values in row i
-      arma::uword nnz = pSliceT.col_ptrs[i + 1] - pSliceT.col_ptrs[i];
-      // Row indices of non-zero values in row i
-      const auto nonzeros =
-          arma::uvec(&pSliceT.row_indices[pSliceT.col_ptrs[i]], nnz);
-
-      Pnew.row(i) =
-          (arma::pinv(UT.rows(nonzeros)) * arma::nonzeros(pSliceT.col(i))).t();
-    }
-
+    // Eval this because armadillo throws an error otherwise
+    auto Pnew = this->solver->solve(UT, pSliceT).t().eval();
     // Eval this for colptr()
     auto Pupdate =
         (Pnew - P.submat(pOffset, 0, pOffset + pSlice.n_rows - 1, k - 1))
             .eval();
 
     // Update P table
-    for (int j = 0; j < k; j++) {
-      petuum::DenseUpdateBatch<float> batch(pOffset, pSlice.n_rows);
-
-      std::memcpy(batch.get_mem(), Pupdate.colptr(j),
-                  pSlice.n_rows * sizeof(float));
-
-      pTable.DenseBatchInc(j, batch);
-    }
+    this->updateMatrixSlice(Pupdate, pTable, pSlice.n_rows, k, pOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
@@ -82,33 +64,15 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     ////////////////////
     // Update U^T
 
-    arma::fmat UTnew(uSlice.n_cols, k);
-
-    for (int i = 0; i < uSlice.n_cols; i++) {
-      // Number of non-zero values in column i
-      arma::uword nnz = uSlice.col_ptrs[i + 1] - uSlice.col_ptrs[i];
-      // Row indices of non-zero values in column i
-      const auto nonzeros =
-          arma::uvec(&uSlice.row_indices[uSlice.col_ptrs[i]], nnz);
-
-      UTnew.row(i) =
-          (arma::pinv(P.rows(nonzeros)) * arma::nonzeros(uSlice.col(i))).t();
-    }
-
+    // Eval this because armadillo throws an error otherwise
+    auto UTnew = this->solver->solve(P, uSlice).t().eval();
     // Eval this for colptr()
     auto UTupdate =
         (UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1))
             .eval();
 
     // Update U table
-    for (int j = 0; j < k; j++) {
-      petuum::DenseUpdateBatch<float> batch(uOffset, uSlice.n_cols);
-
-      std::memcpy(batch.get_mem(), UTupdate.colptr(j),
-                  uSlice.n_cols * sizeof(float));
-
-      utTable.DenseBatchInc(j, batch);
-    }
+    this->updateMatrixSlice(UTupdate, utTable, uSlice.n_cols, k, uOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 

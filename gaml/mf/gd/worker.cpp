@@ -58,14 +58,7 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     pGrad = pGrad * (-step);
 
     // Update P table
-    for (int j = 0; j < pGrad.n_cols; j++) {
-      petuum::DenseUpdateBatch<float> batch(pOffset, pGrad.n_rows);
-
-      std::memcpy(batch.get_mem(), pGrad.colptr(j),
-                  pGrad.n_rows * sizeof(float));
-
-      pTable.DenseBatchInc(j, batch);
-    }
+    this->updateMatrixSlice(pGrad, pTable, pGrad.n_rows, pGrad.n_cols, pOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
@@ -102,14 +95,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     utGrad = utGrad * (-step);
 
     // Update U table
-    for (int j = 0; j < utGrad.n_cols; j++) {
-      petuum::DenseUpdateBatch<float> batch(uOffset, utGrad.n_rows);
-
-      std::memcpy(batch.get_mem(), utGrad.colptr(j),
-                  utGrad.n_rows * sizeof(float));
-
-      utTable.DenseBatchInc(j, batch);
-    }
+    this->updateMatrixSlice(utGrad, utTable, utGrad.n_rows, utGrad.n_cols,
+                            uOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 

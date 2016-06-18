@@ -76,8 +76,12 @@ struct MfalsThread {
     auto UT = std::get<1>(factors);
 
     if (this->rank == 0) {
-      P.save("out/P", arma::csv_ascii);
-      UT.save("out/UT", arma::csv_ascii);
+      std::ostringstream Ppath;
+      std::ostringstream UTpath;
+      Ppath << this->path << "/P";
+      UTpath << this->path << "/U";
+      P.save(Ppath.str(), arma::csv_ascii);
+      UT.save(UTpath.str(), arma::csv_ascii);
     }
 
     petuum::PSTableGroup::DeregisterThread();

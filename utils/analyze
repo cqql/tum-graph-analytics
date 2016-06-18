@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 
 import numpy as np
 
@@ -12,18 +13,56 @@ def main():
     parser.add_argument("-t",
                         "--tolerance",
                         type=float,
-                        default=0.1,
+                        default=0.5,
                         help="Tolerance for correct prediction")
     parser.add_argument("-R", help="Path to rating matrix")
     parser.add_argument("-P", help="Path to P factorization")
     parser.add_argument("-U", help="Path to U^T factorization")
+    parser.add_argument("--pbias", help="Path to P bias")
+    parser.add_argument("--ubias", help="Path to U bias")
+    parser.add_argument("--mean", help="Path to mean")
+    parser.add_argument(
+        "-d",
+        "--dir",
+        help="Directory with factorizations as created by mf-als/bias-mf")
 
     args = parser.parse_args()
     tolerance = args.tolerance
 
+    if args.dir:
+        if args.R is None:
+            args.R = os.path.join(args.dir, "test")
+
+        args.P = os.path.join(args.dir, "P")
+        args.U = os.path.join(args.dir, "U")
+
+        if os.path.isfile(os.path.join(args.dir, "mean")):
+            args.mean = os.path.join(args.dir, "mean")
+
+        if os.path.isfile(os.path.join(args.dir, "Pbias")):
+            args.pbias = os.path.join(args.dir, "Pbias")
+
+        if os.path.isfile(os.path.join(args.dir, "Ubias")):
+            args.ubias = os.path.join(args.dir, "Ubias")
+
     R = matrix.loadfile(args.R)
     P = np.loadtxt(args.P, delimiter=",", ndmin=2)
     U = np.loadtxt(args.U, delimiter=",", ndmin=2).T
+
+    if args.mean:
+        mean = np.loadtxt(args.mean, delimiter=",", ndmin=1)[0]
+    else:
+        mean = 0.0
+
+    if args.pbias:
+        Pbias = np.loadtxt(args.pbias, delimiter=",")
+    else:
+        Pbias = np.zeros((P.shape[0], 1))
+
+    if args.ubias:
+        Ubias = np.loadtxt(args.ubias, delimiter=",")
+    else:
+        Ubias = np.zeros((1, U.shape[1]))
 
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)
@@ -34,7 +73,7 @@ def main():
     for k in range(R.nnz):
         i, j = R.row[k], R.col[k]
         expected = R.data[k]
-        actual = P[i, :].dot(U[:, j])
+        actual = mean + Pbias[i] + Ubias[j] + P[i, :].dot(U[:, j])
         error = abs(expected - actual)
 
         mse += error * error

@@ -1,4 +1,5 @@
 #include "worker.h"
+#include "../../util/table.h"
 
 namespace gaml {
 
@@ -26,8 +27,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
   petuum::PSTableGroup::GlobalBarrier();
 
   // Fetch the initial values
-  arma::fmat P = this->loadMatrix(pTable, uSlice.n_rows, k);
-  arma::fmat UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+  arma::fmat P = gaml::util::table::loadMatrix(pTable, uSlice.n_rows, k);
+  arma::fmat UT = gaml::util::table::loadMatrix(utTable, pSlice.n_cols, k);
 
   // We want to access the rows of pSlice directly in the loop which is
   // preferably done by accessing the columns of the transposed version due to
@@ -51,12 +52,13 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
         (Pnew - P.submat(pOffset, 0, pOffset + pSlice.n_rows - 1, k - 1));
 
     // Update P table
-    this->updateMatrixSlice(Pupdate, pTable, pSlice.n_rows, k, pOffset);
+    gaml::util::table::updateMatrixSlice(Pupdate, pTable, pSlice.n_rows, k,
+                                         pOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Load updated P
-    P = this->loadMatrix(pTable, uSlice.n_rows, k);
+    P = gaml::util::table::loadMatrix(pTable, uSlice.n_rows, k);
 
     ////////////////////
     // Update U^T
@@ -66,12 +68,13 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
         UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1);
 
     // Update U table
-    this->updateMatrixSlice(UTupdate, utTable, uSlice.n_cols, k, uOffset);
+    gaml::util::table::updateMatrixSlice(UTupdate, utTable, uSlice.n_cols, k,
+                                         uOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Load updated U^T
-    UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+    UT = gaml::util::table::loadMatrix(utTable, pSlice.n_cols, k);
 
     ///////////////////////
     // Compute SE (squared error) for this P slice
@@ -93,7 +96,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch all updated SEs
-    const arma::fmat SEs = this->loadMatrix(this->seTable, this->nranks, 2);
+    const arma::fmat SEs =
+        gaml::util::table::loadMatrix(this->seTable, this->nranks, 2);
 
     // Compute MSE
     const float mse = arma::sum(SEs.col(0)) / arma::sum(SEs.col(1));

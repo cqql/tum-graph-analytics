@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "../../util/table.h"
 #include "worker.h"
 
 namespace gaml {
@@ -25,8 +26,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
   petuum::PSTableGroup::GlobalBarrier();
 
   // Fetch the initial values
-  arma::fmat P = this->loadMatrix(pTable, uSlice.n_rows, k);
-  arma::fmat UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+  arma::fmat P = gaml::util::table::loadMatrix(pTable, uSlice.n_rows, k);
+  arma::fmat UT = gaml::util::table::loadMatrix(utTable, pSlice.n_cols, k);
 
   float step = 1.0;
 
@@ -58,12 +59,13 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     pGrad = pGrad * (-step);
 
     // Update P table
-    this->updateMatrixSlice(pGrad, pTable, pGrad.n_rows, pGrad.n_cols, pOffset);
+    gaml::util::table::updateMatrixSlice(pGrad, pTable, pGrad.n_rows,
+                                         pGrad.n_cols, pOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch updated P
-    P = this->loadMatrix(pTable, uSlice.n_rows, k);
+    P = gaml::util::table::loadMatrix(pTable, uSlice.n_rows, k);
 
     // Project factor
     P = this->projection.project(P);
@@ -95,13 +97,13 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     utGrad = utGrad * (-step);
 
     // Update U table
-    this->updateMatrixSlice(utGrad, utTable, utGrad.n_rows, utGrad.n_cols,
-                            uOffset);
+    gaml::util::table::updateMatrixSlice(utGrad, utTable, utGrad.n_rows,
+                                         utGrad.n_cols, uOffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch updated U^T
-    UT = this->loadMatrix(utTable, pSlice.n_cols, k);
+    UT = gaml::util::table::loadMatrix(utTable, pSlice.n_cols, k);
 
     // Project factor
     UT = this->projection.project(UT);

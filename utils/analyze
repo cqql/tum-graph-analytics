@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 
 import numpy as np
 
@@ -20,9 +21,29 @@ def main():
     parser.add_argument("--pbias", help="Path to P bias")
     parser.add_argument("--ubias", help="Path to U bias")
     parser.add_argument("--mean", help="Path to mean")
+    parser.add_argument(
+        "-d",
+        "--dir",
+        help="Directory with factorizations as created by mf-als/bias-mf")
 
     args = parser.parse_args()
     tolerance = args.tolerance
+
+    if args.dir:
+        if args.R is None:
+            args.R = os.path.join(args.dir, "test")
+
+        args.P = os.path.join(args.dir, "P")
+        args.U = os.path.join(args.dir, "U")
+
+        if os.path.isfile(os.path.join(args.dir, "mean")):
+            args.mean = os.path.join(args.dir, "mean")
+
+        if os.path.isfile(os.path.join(args.dir, "Pbias")):
+            args.pbias = os.path.join(args.dir, "Pbias")
+
+        if os.path.isfile(os.path.join(args.dir, "Ubias")):
+            args.ubias = os.path.join(args.dir, "Ubias")
 
     R = matrix.loadfile(args.R)
     P = np.loadtxt(args.P, delimiter=",", ndmin=2)

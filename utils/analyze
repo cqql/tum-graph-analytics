@@ -57,12 +57,12 @@ def main():
     if args.pbias:
         Pbias = np.loadtxt(args.pbias, delimiter=",")
     else:
-        Pbias = np.zeros((P.shape[0], 1))
+        Pbias = np.zeros((P.shape[0],))
 
     if args.ubias:
         Ubias = np.loadtxt(args.ubias, delimiter=",")
     else:
-        Ubias = np.zeros((1, U.shape[1]))
+        Ubias = np.zeros((U.shape[1],))
 
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)

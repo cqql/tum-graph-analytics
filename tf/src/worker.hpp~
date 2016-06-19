@@ -1,0 +1,71 @@
+#ifndef WORKER_H_
+#define WORKER_H_
+
+#include <string>
+
+#include <armadillo>
+#include <petuum_ps_common/include/petuum_ps.hpp>
+#include "tensor_data.hpp"
+
+#include <sys/time.h>
+#include <ctime>
+
+/* Remove if already defined */
+typedef long long int64; typedef unsigned long long uint64;
+
+/* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
+* windows and linux. */
+
+uint64 GetTimeMs64()
+{
+  /* Linux */
+  struct timeval tv;
+    
+  gettimeofday(&tv, NULL);
+    
+  uint64 ret = tv.tv_usec;
+  /* Convert from micro seconds (10^-6) to milliseconds (10^-3) */
+  ret /= 1000;
+    
+  /* Adds the seconds (10^0) after converting them to milliseconds (10^-3) */
+  ret += (tv.tv_sec * 1000);
+    
+  return ret;
+}
+
+
+namespace tfals {
+
+class Worker {
+ public:
+  Worker(int id, std::string basepath, int rank, int iterations,
+               int evalrounds, int usertableid, int prodtableid, int wordtableid);
+
+  void run();
+
+ private:
+  int id;
+  std::string basepath;
+  int rank;
+  int iterations;
+  int evalrounds;
+  int usertableid;
+  int prodtableid;
+  int wordtableid;
+
+  // Initialize table as an m*n matrix with random entries
+  void randomizetable(petuum::Table<float>& table, int m, int n);
+  
+  void updatetable(petuum::Table<float>& table, arma::fmat& grad, int offset);
+
+  // Load matrix from a table
+  arma::fmat loadmat(petuum::Table<float>& table, int m, int n);
+
+  void evaltest(arma::fmat& U, arma::fmat& P, arma::fmat& T);
+  void eval(arma::fmat& U, arma::fmat& P, arma::fmat& T, Sparse3dTensor& R,
+            int useroffset, int prodoffset);
+};
+}
+
+#endif  // WORKER_H_
+

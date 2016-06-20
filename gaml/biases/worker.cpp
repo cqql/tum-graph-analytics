@@ -38,33 +38,6 @@ Worker::compute(const arma::sp_fmat pSlice, const int pOffset,
   pslice = this->subtract(pslice, mean);
   uslice = this->subtract(uslice, mean);
 
-  // Compute the user specific means for this U slice
-  arma::fvec usliceMeans(uslice.n_cols, arma::fill::zeros);
-  for (int i = 0; i < uslice.n_cols; i++) {
-    const int nnz = uslice.col_ptrs[i + 1] - uslice.col_ptrs[i];
-
-    if (nnz > 0) {
-      usliceMeans(i) =
-          arma::mean(arma::fvec(&uslice.values[uslice.col_ptrs[i]], nnz));
-    }
-  }
-
-  // Share the user-specific biases
-  gaml::util::table::updateMatrixSlice(usliceMeans, uTable, uslice.n_cols, 1,
-                                       uOffset);
-
-  // Center the columns of U slice
-  uslice = this->subtractColumnwise(uslice, usliceMeans);
-
-  petuum::PSTableGroup::GlobalBarrier();
-
-  // Load the complete user biases
-  const arma::fvec uMeans =
-      gaml::util::table::loadMatrix(uTable, pslice.n_cols, 1).col(0);
-
-  // Center the columns of P slice
-  pslice = this->subtractColumnwise(pslice, uMeans);
-
   // Compute the product-specific biases for this P slice
   const arma::sp_fmat psliceT = pslice.t();
   arma::fvec psliceMeans(psliceT.n_cols, arma::fill::zeros);
@@ -92,6 +65,33 @@ Worker::compute(const arma::sp_fmat pSlice, const int pOffset,
 
   // Center the rows of U slice
   uslice = this->subtractRowwise(uslice, pMeans);
+
+  // Compute the user specific means for this U slice
+  arma::fvec usliceMeans(uslice.n_cols, arma::fill::zeros);
+  for (int i = 0; i < uslice.n_cols; i++) {
+    const int nnz = uslice.col_ptrs[i + 1] - uslice.col_ptrs[i];
+
+    if (nnz > 0) {
+      usliceMeans(i) =
+          arma::mean(arma::fvec(&uslice.values[uslice.col_ptrs[i]], nnz));
+    }
+  }
+
+  // Share the user-specific biases
+  gaml::util::table::updateMatrixSlice(usliceMeans, uTable, uslice.n_cols, 1,
+                                       uOffset);
+
+  // Center the columns of U slice
+  uslice = this->subtractColumnwise(uslice, usliceMeans);
+
+  petuum::PSTableGroup::GlobalBarrier();
+
+  // Load the complete user biases
+  const arma::fvec uMeans =
+      gaml::util::table::loadMatrix(uTable, pslice.n_cols, 1).col(0);
+
+  // Center the columns of P slice
+  pslice = this->subtractColumnwise(pslice, uMeans);
 
   return {mean, uMeans, pMeans, uslice, pslice};
 }

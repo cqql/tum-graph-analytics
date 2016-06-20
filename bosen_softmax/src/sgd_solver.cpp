@@ -176,7 +176,7 @@ int32_t SGDSolver::CostSensitivePrediction(const std::vector<float>& prediction)
 		
 		float sum = 0.0f;
 		for (int k = 0; k < num_labels_; ++k) {
-			sum += prediction[i] * costVector[k];
+			sum += prediction[k] * costVector[k];
 		}
 		
 		costPrediction.push_back(sum);

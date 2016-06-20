@@ -19,22 +19,21 @@ ssh_cmd = (
     )
 
 params = {
-    "train_file": join(app_dir, "datasets/amazon_word/train.libsvm")
-    , "test_file": join(app_dir, "datasets/amazon_word/test.libsvm")
+    "train_file": join(app_dir, "datasets/amazon_word_10e_4mil/train10_movTV.libsvm")
+    , "test_file": join(app_dir, "datasets/amazon_word_10e_4mil/test10_movTV.libsvm")
     , "global_data": "true"
     , "perform_test": "true"
     , "use_weight_file": "false"
     , "weight_file": ""
-    , "num_epochs": 50
+    , "num_epochs": 100
     , "num_batches_per_epoch": 50
     , "init_lr": 0.01 # initial learning rate
     , "lr_decay_rate": 0.95 # lr = init_lr * (lr_decay_rate)^T
     , "num_batches_per_eval": 50
     , "num_train_eval": 1000 # compute train error on these many train.
     , "num_test_eval": 20
-    , "lambda": 0.1
+    , "lambda": 0.05
     , "output_file_prefix": join(app_dir, "out")
-    , "cost_sensitive": "true"
     }
 
 petuum_params = {

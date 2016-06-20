@@ -93,8 +93,55 @@ void Engine::ReadData() {
                                             num_test_data_, &test_features_, &test_labels_,
                                             feature_one_based_, label_one_based_, snappy_compressed_);
         }
+    } else if (read_format_ == "binLittleEndian") {
+        ReadLittleEndianBinaryData(train_file, feature_dim_, num_train_data_,
+                                   &train_features_, &train_labels_);
+        if (perform_test_) {
+            LOG(INFO) << "Reading test file: " << FLAGS_test_file;
+            ReadLittleEndianBinaryData(FLAGS_test_file, feature_dim_,
+                                       num_test_data_, &test_features_, &test_labels_);
+        }
     }
 }
+
+void Engine::ReadLittleEndianBinaryData(const std::string& filename,
+                                        int32_t feature_dim, int32_t num_data,
+                                        std::vector<petuum::ml::AbstractFeature<float>*>* features,
+                                        std::vector<int32_t>* labels,
+                                        bool feature_one_based, bool label_one_based) {
+    petuum::HighResolutionTimer read_timer;
+    features->resize(num_data);
+    labels->resize(num_data);
+    // std::ifstream is(filename, std::ifstream::binary);
+    petuum::io::ifstream is(filename, std::ifstream::binary);
+    CHECK(is) << "Failed to open " << filename;
+    std::vector<float> cache(feature_dim);
+    for (int i = 0; i < num_data; ++i) {
+        // Read the label
+        is.read(reinterpret_cast<char*>(&(*labels)[i]), sizeof(int32_t));
+        if (label_one_based) {
+            CHECK_LE(0, --(*labels)[i]) << "label is not one-based";
+        }
+        if (std::abs((*labels)[i]) > num_labels_) {
+			LOG(INFO) << "ERROR: Bad label at: " << i << " Label val: " << (*labels)[i];
+			throw;
+		}
+        
+        // Read the feature
+        is.read(reinterpret_cast<char*>(cache.data()), sizeof(float) * feature_dim);
+        if (feature_one_based) {
+            for (int j = 0; j < feature_dim; ++j) {
+                CHECK_LE(0, --cache[j]) << "feature is not one-based";
+                
+            }
+        }
+        
+        (*features)[i] = new petuum::ml::DenseFeature<float>(cache);
+    }
+    LOG(INFO) << "Read " << num_data << " instances from " << filename << " in "
+              << read_timer.elapsed() << " seconds.";
+}
+
 
 void Engine::InitWeights(const std::string& weight_file) {
     petuum::HighResolutionTimer weight_init_timer;
@@ -337,12 +384,12 @@ std::string Engine::ComputeAndPrintStats(SGDSolver* solver) {
         //~ num_error += solver->ZeroOneLoss(pred, test_labels_[i]);
 
         int32_t predictedLabel; // gets the most probable label
-        
-        
+
+
         predictedLabel = solver->MPLabel(pred);
         conf_mat[predictedLabel][test_labels_[i]] += 1.0f;
-		
-		num_error += test_labels_[i] == predictedLabel ? 0 : 1;
+
+        num_error += test_labels_[i] == predictedLabel ? 0 : 1;
         ++num_total;
     }
 
@@ -351,6 +398,8 @@ std::string Engine::ComputeAndPrintStats(SGDSolver* solver) {
     output << "Total Samples: " << num_total << std::endl;
     output << "Wrongly classified: " << num_error << std::endl;
     output << "Correctly classified: " << (num_total - num_error) << std::endl;
+    
+    double totalCost = 0;
 
     for (int32_t r = 0; r < num_labels_; r++) {
         for (int32_t c = 0; c < num_labels_; c++) {
@@ -359,8 +408,11 @@ std::string Engine::ComputeAndPrintStats(SGDSolver* solver) {
             {
                 output << std::endl;
             }
+            totalCost += (conf_mat[r][c] * solver->cost_mat_[r][c]);
         }
     }
+    
+    output << "Total cost: " << totalCost;
 
     // Clean up local values for confusion matrix
     for(int32_t i = 0; i < num_labels_; ++i) {
@@ -502,9 +554,9 @@ std::string Engine::PrintAllEval(int32_t up_to_ith_eval) {
         output << loss_row[kColIdxLossTableEpoch] << " "
                << loss_row[kColIdxLossTableBatch] << " "
                << loss_row[kColIdxLossTableZeroOneLoss] /
-				  loss_row[kColIdxLossTableNumEvalTrain] << " "
+               loss_row[kColIdxLossTableNumEvalTrain] << " "
                << loss_row[kColIdxLossTableEntropyLoss] /
-                  loss_row[kColIdxLossTableNumEvalTrain] << " "
+               loss_row[kColIdxLossTableNumEvalTrain] << " "
                << loss_row[kColIdxLossTableNumEvalTrain] << " "
                << test_info << " "
                << loss_row[kColIdxLossTableTime] << std::endl;

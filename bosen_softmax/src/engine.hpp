@@ -35,8 +35,14 @@ class Engine {
 
         // Save loss up to ith evaluation (inclusive).
         void SaveLoss(int32_t up_to_ith_eval);
-        
+
         void SaveStats(SGDSolver* solver);
+
+        void ReadLittleEndianBinaryData(const std::string& filename,
+                                        int32_t feature_dim, int32_t num_data,
+                                        std::vector<petuum::ml::AbstractFeature<float>*>* features,
+                                        std::vector<int32_t>* labels,
+                                        bool feature_one_based = false, bool label_one_based = false);
 
         // Print relevant experiment parameters.
         std::string GetExperimentInfo() const;

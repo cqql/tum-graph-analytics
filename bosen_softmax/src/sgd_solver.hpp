@@ -31,14 +31,14 @@ class SGDSolver {
         // Predict the probability of each label.
         std::vector<float> Predict(
             const petuum::ml::AbstractFeature<float>& feature) const;
-            
-		int32_t CostSensitivePrediction(const std::vector<float>& prediction) const;
+
+        int32_t CostSensitivePrediction(const std::vector<float>& prediction) const;
 
         // Return 0 if a prediction (of length num_labels_) correctly gives the
         // ground truth label 'label'; 0 otherwise.
         int32_t ZeroOneLoss(const std::vector<float>& prediction, int32_t label)
         const;
-        
+
         // Return the Most Probable Label, i.e the label with the highest probability
         int32_t MPLabel(const std::vector<float>& prediction)
         const;
@@ -55,6 +55,7 @@ class SGDSolver {
         // Save the current weight in cache in libsvm format.
         void SaveWeights(const std::string& filename) const;
 
+        std::vector<std::vector<float>> cost_mat_;
     private:
         // ======== PS Tables ==========
         // The weight of each class (stored as single feature-major row).
@@ -63,8 +64,6 @@ class SGDSolver {
         // Thread-cache.
         std::vector<petuum::ml::DenseFeature<float>> w_cache_;
         std::vector<std::vector<float>> w_cache_old_;
-        
-        std::vector<std::vector<float>> cost_mat_;
 
         int32_t feature_dim_; // feature dimension
         int32_t w_table_num_cols_;  // # of cols in w_table.
@@ -75,10 +74,10 @@ class SGDSolver {
 
         // Specialization Functions
         std::function<float(const petuum::ml::AbstractFeature<float>&,
-                            const petuum::ml::AbstractFeature<float>&)> FeatureDotProductFun_;        
-        
+                            const petuum::ml::AbstractFeature<float>&)> FeatureDotProductFun_;
+
         void ApplyL2Regularization(int label, double lr);
-        
+
         void CreateCostMatrix();
 
 };

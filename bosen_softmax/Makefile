@@ -11,6 +11,7 @@ SOFTMAX_HDR = $(wildcard $(SOFTMAX_DIR)/src/*.hpp)
 SOFTMAX_BIN = $(SOFTMAX_DIR)/bin
 SOFTMAX_OBJ = $(SOFTMAX_SRC:.cpp=.o)
 NDEBUG = -DNDEBUG
+CFLAGS = -g
 
 all: $(SOFTMAX_BIN)/softmax_main
 

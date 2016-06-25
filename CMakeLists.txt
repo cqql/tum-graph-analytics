@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 project(gaml CXX)
 
 # Load bosen CMake configuration
-add_subdirectory(libs/bosen)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/libs/bosen)
 
 # Include headers from boost and dependencies
 include_directories(${Bosen_INCLUDE_DIRS} ${third_INCLUDE_DIRS}

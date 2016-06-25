@@ -1,0 +1,25 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e9d8e6e..3f92eeb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ cmake_minimum_required(VERSION 2.8)
+ 
+-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
++set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+ 
+ add_subdirectory(third_party)
+ add_subdirectory(src)
+diff --git a/cmake/modules/FindLevelDB.cmake b/cmake/modules/FindLevelDB.cmake
+index 41b792c..e682904 100644
+--- a/cmake/modules/FindLevelDB.cmake
++++ b/cmake/modules/FindLevelDB.cmake
+@@ -1,7 +1,7 @@
+ # Find libleveldb.a - key/value storage system
+ 
+ find_path(LevelDB_INCLUDE_PATH NAMES leveldb/db.h)
+-find_library(LevelDB_LIBRARY NAMES libleveldb.a libleveldb.lib)
++find_library(LevelDB_LIBRARY NAMES libleveldb.a libleveldb.so libleveldb.so libleveldb.lib)
+ 
+ if(LevelDB_INCLUDE_PATH AND LevelDB_LIBRARY)
+   set(LevelDB_FOUND TRUE)

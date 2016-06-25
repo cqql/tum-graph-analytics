@@ -47,7 +47,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     /////////////////////
     // Update P
 
-    const arma::fmat Pnew = this->solver->solve(UT, pSliceT).t();
+    arma::fmat Pnew = this->solver->solve(UT, pSliceT).t();
+    Pnew = arma::clamp(Pnew, 0.0, Pnew.max());
     const arma::fmat Pupdate =
         (Pnew - P.submat(pOffset, 0, pOffset + pSlice.n_rows - 1, k - 1));
 
@@ -63,7 +64,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     ////////////////////
     // Update U^T
 
-    const arma::fmat UTnew = this->solver->solve(P, uSlice).t();
+    arma::fmat UTnew = this->solver->solve(P, uSlice).t();
+    UTnew = arma::clamp(UTnew, 0.0, UTnew.max());
     const arma::fmat UTupdate =
         UTnew - UT.submat(uOffset, 0, uOffset + uSlice.n_cols - 1, k - 1);
 

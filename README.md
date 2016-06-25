@@ -5,6 +5,9 @@
 ```sh
 # Clone bosen
 git clone https://github.com:petuum/bosen.git libs/bosen
+
+# Fix bosen's CMakeLists.txt and modules so that we can include it
+(cd libs/bosen; git apply ../../bosen-patches)
 ```
 
 ### Ubuntu

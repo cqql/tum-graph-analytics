@@ -41,12 +41,12 @@ set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
   gaml/mf/als/worker.cpp gaml/mf/als/pseudo_inverse_solver.cpp
   gaml/mf/als/ridge_regression_solver.cpp gaml/mf/als/logger.cpp
   gaml/io/tensor.cpp gaml/tf/worker.cpp
-  gaml/biases/worker.cpp
+  gaml/biases/worker.cpp gaml/mf/koren/worker.cpp
   gaml/util/table.cpp)
 
 set(softmax_srcs
   gaml/softmax/src/common.hpp
-  gaml/softmax/src/engine.hpp gaml/softmax/src/engine.cpp 
+  gaml/softmax/src/engine.hpp gaml/softmax/src/engine.cpp
   gaml/softmax/src/sgd_solver.hpp gaml/softmax/src/sgd_solver.cpp)
 
 add_executable(mf-als gaml/bins/mf-als.cpp ${gaml_SRCS})
@@ -57,9 +57,12 @@ target_link_libraries(bias-mf ${gaml_LIBRARIES})
 
 add_executable(softmax gaml/softmax/src/softmax.cpp ${softmax_srcs})
 target_link_libraries(softmax ${gaml_LIBRARIES})
-add_custom_command(TARGET softmax 
+add_custom_command(TARGET softmax
                    POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:softmax> gaml/softmax/bin)
 
 add_executable(tf gaml/bins/tf.cpp ${gaml_SRCS})
 target_link_libraries(tf ${gaml_LIBRARIES})
+
+add_executable(koren gaml/bins/koren.cpp ${gaml_SRCS})
+target_link_libraries(koren ${gaml_LIBRARIES})

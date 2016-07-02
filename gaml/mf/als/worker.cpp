@@ -114,7 +114,7 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
     }
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
-  return {P, UT};
+  return std::make_tuple(P, UT);
 }
 
 void Worker::initTables(int pTableId, int uTableId, int rowType, int k,

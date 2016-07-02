@@ -93,7 +93,7 @@ Worker::compute(const arma::sp_fmat pSlice, const int pOffset,
   // Center the columns of P slice
   pslice = this->subtractColumnwise(pslice, uMeans);
 
-  return {mean, uMeans, pMeans, uslice, pslice};
+  return std::make_tuple(mean, uMeans, pMeans, uslice, pslice);
 }
 
 void Worker::initTables(int rowType, int pTableId, int pNumRows, int uTableId,

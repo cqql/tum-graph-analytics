@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8)
 
 project(gaml CXX)
 
+add_definitions(-std=c++11)
+
 # Load bosen CMake configuration
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/libs/bosen)
 
@@ -22,12 +24,16 @@ set(Bosen_LIBRARIES rt nsl pthread ${ZeroMQ_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
 find_package(Armadillo REQUIRED)
 include_directories(${ARMADILLO_INCLUDE_DIRS})
 
+# Initialize HDF5
+find_package(HDF5 REQUIRED CXX)
+include_directories(${HDF5_INCLUDE_DIR})
+
 # Additional boost libraries that we commonly need
 find_package(Boost COMPONENTS system program_options)
 
 # Collect all libraries that we will link with almost every time
 set(gaml_LIBRARIES petuum_bosen ${Bosen_LIBRARIES} ${Boost_LIBRARIES}
-  ${ARMADILLO_LIBRARIES})
+  ${ARMADILLO_LIBRARIES} ${HDF5_LIBRARIES})
 
 # List all source files
 set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
@@ -37,8 +43,16 @@ set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
   gaml/biases/worker.cpp
   gaml/util/table.cpp)
 
+set(softmax_srcs
+  gaml/softmax/src/common.hpp
+  gaml/softmax/src/engine.hpp gaml/softmax/src/engine.cpp 
+  gaml/softmax/src/sgd_solver.hpp gaml/softmax/src/sgd_solver.cpp)
+
 add_executable(mf-als gaml/bins/mf-als.cpp ${gaml_SRCS})
 target_link_libraries(mf-als ${gaml_LIBRARIES})
 
 add_executable(bias-mf gaml/bins/bias-mf.cpp ${gaml_SRCS})
 target_link_libraries(bias-mf ${gaml_LIBRARIES})
+
+add_executable(softmax gaml/softmax/src/softmax.cpp ${softmax_srcs})
+target_link_libraries(softmax ${gaml_LIBRARIES})

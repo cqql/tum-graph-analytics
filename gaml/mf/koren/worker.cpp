@@ -25,8 +25,10 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                const arma::sp_fmat uSlice, const int uOffset, const int k) {
   const auto rank = this->rank;
   const auto nranks = this->nranks;
-  const auto lambda = this->lambda;
-  auto gamma = this->gamma;
+  const auto lambdab = this->lambdab;
+  const auto lambdaqpy = this->lambdaqpy;
+  auto gammab = this->gammab;
+  auto gammaqpy = this->gammaqpy;
   const auto atol = this->atol;
   const auto rtol = this->rtol;
   auto muTable = this->muTable;
@@ -262,10 +264,10 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
     // Compute gradients of the locally managed parameters
     const arma::fvec biGrad =
-        2 * (lambda * nRiLocal % bi.rows(iOffset, iOffset + nItemsLocal - 1) -
+        2 * (lambdab * nRiLocal % bi.rows(iOffset, iOffset + nItemsLocal - 1) -
              arma::sum(iE, 1));
     const arma::fvec buGrad =
-        2 * (lambda * nRuLocal % bu.rows(uOffset, uOffset + nUsersLocal - 1) -
+        2 * (lambdab * nRuLocal % bu.rows(uOffset, uOffset + nUsersLocal - 1) -
              arma::sum(uE, 0).t());
 
     arma::fmat qGrad(k, nItemsLocal);
@@ -274,7 +276,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
     for (int i = 0; i < nItemsLocal; ++i) {
       // Maybe use arma::cols for subview of p
-      qGrad.col(i) = nRiLocal(i) * lambda * q.col(i + iOffset);
+      qGrad.col(i) = nRiLocal(i) * lambdaqpy * q.col(i + iOffset);
 
       for (const auto u : RiLocal[i]) {
         qGrad.col(i) -=
@@ -287,12 +289,12 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
         prefactor += isqNRu(u) * iE(i, u);
       }
 
-      yGrad.col(i) = nRiLocal(i) * lambda * y.col(i + iOffset) -
+      yGrad.col(i) = nRiLocal(i) * lambdaqpy * y.col(i + iOffset) -
                      prefactor * q.col(i + iOffset);
     }
 
     for (int u = 0; u < nUsersLocal; ++u) {
-      pGrad.col(u) = nRuLocal(u) * lambda * p.col(u + uOffset);
+      pGrad.col(u) = nRuLocal(u) * lambdaqpy * p.col(u + uOffset);
 
       for (const auto i : RuLocal[u]) {
         pGrad.col(u) -= q.col(i) * uE(i, u);
@@ -304,11 +306,11 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     yGrad *= 2;
 
     // Compute update steps
-    const arma::fvec biStep = -gamma * biGrad;
-    const arma::fvec buStep = -gamma * buGrad;
-    const arma::fmat qStep = -gamma * qGrad;
-    const arma::fmat pStep = -gamma * pGrad;
-    const arma::fmat yStep = -gamma * yGrad;
+    const arma::fvec biStep = -gammab * biGrad;
+    const arma::fvec buStep = -gammab * buGrad;
+    const arma::fmat qStep = -gammaqpy * qGrad;
+    const arma::fmat pStep = -gammaqpy * pGrad;
+    const arma::fmat yStep = -gammaqpy * yGrad;
 
     // Update tables with steps
     this->stepTable(biTable, biStep, 0, iOffset);
@@ -364,7 +366,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                 << std::endl;
     }
 
-    gamma *= 0.9;
+    gammab *= 0.9;
+    gammaqpy *= 0.9;
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
   return {mu, bi, bu, q, p, y};

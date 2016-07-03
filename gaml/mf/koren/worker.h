@@ -14,15 +14,18 @@ namespace koren {
 
 class Worker {
  public:
-  Worker(const int rank, const int nranks, const float lambda, const float gamma,
+  Worker(const int rank, const int nranks, const float lambdab,
+         const float lambdaqpy, const float gammab, const float gammaqpy,
          const float atol, const float rtol, const int muTableId,
          const int biTableId, const int buTableId, const int qTableId,
          const int pTableId, const int yTableId, const int errorTableId,
          const int nruTableId, const int ruTableId, const int seTableId)
       : rank(rank),
         nranks(nranks),
-        lambda(lambda),
-        gamma(gamma),
+        lambdab(lambdab),
+        lambdaqpy(lambdaqpy),
+        gammab(gammab),
+        gammaqpy(gammaqpy),
         atol(atol),
         rtol(rtol),
         muTable(petuum::PSTableGroup::GetTableOrDie<float>(muTableId)),
@@ -50,8 +53,10 @@ class Worker {
  private:
   const int rank;
   const int nranks;
-  const float lambda;
-  const float gamma;
+  const float lambdab;
+  const float lambdaqpy;
+  const float gammab;
+  const float gammaqpy;
   const float atol;
   const float rtol;
   petuum::Table<float> muTable;

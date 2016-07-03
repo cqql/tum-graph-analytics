@@ -30,15 +30,17 @@ struct KorenThread {
   int k;
   int iterations;
   int seed;
-  float lambda;
-  float gamma;
+  float lambdab;
+  float lambdaqpy;
+  float gammab;
+  float gammaqpy;
   float atol;
   float rtol;
   float alpha;
 
   KorenThread(int nranks, int rank, int localRank, std::string path, int k,
-              int iterations, int seed, float lambda, float gamma, float atol,
-              float rtol, float alpha)
+              int iterations, int seed, float lambdab, float lambdaqpy,
+              float gammab, float gammaqpy, float atol, float rtol, float alpha)
       : nranks(nranks),
         rank(rank),
         localRank(localRank),
@@ -46,8 +48,10 @@ struct KorenThread {
         k(k),
         iterations(iterations),
         seed(seed),
-        lambda(lambda),
-        gamma(gamma),
+        lambdab(lambdab),
+        lambdaqpy(lambdaqpy),
+        gammab(gammab),
+        gammaqpy(gammaqpy),
         atol(atol),
         rtol(rtol),
         alpha(alpha) {}
@@ -69,9 +73,10 @@ struct KorenThread {
     auto uSlice = userms.R;
 
     gaml::mf::koren::Worker worker(
-        this->rank, this->nranks, this->lambda, this->gamma, this->atol,
-        this->rtol, Table::MU, Table::BI, Table::BU, Table::Q, Table::P,
-        Table::Y, Table::ERROR, Table::NRU, Table::RU, Table::SE);
+        this->rank, this->nranks, this->lambdab, this->lambdaqpy, this->gammab,
+        this->gammaqpy, this->atol, this->rtol, Table::MU, Table::BI, Table::BU,
+        Table::Q, Table::P, Table::Y, Table::ERROR, Table::NRU, Table::RU,
+        Table::SE);
     auto factors = worker.factor(iSlice, iOffset, uSlice, uOffset, k);
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
@@ -119,8 +124,16 @@ int main(int argc, char** argv) {
        "Minimum relative MSE improvement before termination")
       ("gamma", po::value<float>()->default_value(1.0),
        "GD step length")
+      ("gamma-b", po::value<float>()->default_value(0.007),
+       "GD step length for the biases")
+      ("gamma-qpy", po::value<float>()->default_value(0.007),
+       "GD step length for the factors")
       ("lambda", po::value<float>()->default_value(1.0),
-       "Regularization weight");
+       "Regularization weight")
+      ("lambda-b", po::value<float>()->default_value(0.005),
+       "Regularization weight for the biases")
+      ("lambda-qpy", po::value<float>()->default_value(0.015),
+       "Regularization weight for the factors");
   // clang-format on
 
   po::variables_map vm;
@@ -140,7 +153,11 @@ int main(int argc, char** argv) {
   float atol = vm["atol"].as<float>();
   float rtol = vm["rtol"].as<float>();
   float gamma = vm["gamma"].as<float>();
+  float gammab = vm["gamma-b"].as<float>();
+  float gammaqpy = vm["gamma-qpy"].as<float>();
   float lambda = vm["lambda"].as<float>();
+  float lambdab = vm["lambda-b"].as<float>();
+  float lambdaqpy = vm["lambda-qpy"].as<float>();
 
   int nranks = num_clients * num_workers;
 
@@ -177,10 +194,11 @@ int main(int argc, char** argv) {
   for (int i = 0; i < num_workers; i++) {
     int rank = client_id * num_workers + i;
 
-    threads[i] = std::thread(&KorenThread::run,
-                             std::unique_ptr<KorenThread>(new KorenThread(
-                                 nranks, rank, i, datapath, k, iterations,
-                                 seed + i, lambda, gamma, atol, rtol, 0.0)));
+    threads[i] = std::thread(
+        &KorenThread::run,
+        std::unique_ptr<KorenThread>(new KorenThread(
+            nranks, rank, i, datapath, k, iterations, seed + i, lambdab,
+            lambdaqpy, gammab, gammaqpy, atol, rtol, 0.0)));
   }
 
   for (auto& thread : threads) {

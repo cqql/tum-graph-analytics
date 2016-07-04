@@ -67,13 +67,16 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   const arma::sp_fmat nUSlice = uSlice - mu;
 
   // Initialize all the parameters
-  arma::fvec bi(nItems, arma::fill::zeros);
-  arma::fvec bu(nUsers, arma::fill::zeros);
+  arma::fvec bi(nItems, arma::fill::randn);
+  arma::fvec bu(nUsers, arma::fill::randn);
   arma::fmat q(k, nItems, arma::fill::randn);
   arma::fmat p(k, nUsers, arma::fill::randn);
-  arma::fmat y(k, nItems, arma::fill::zeros);
+  arma::fmat y(k, nItems, arma::fill::randn);
 
-  // TODO: Maybe store randomized P and U in tables??
+  // NOTE: We do not store the parameters in the table initially. This means
+  // that each worker uses a different set of parameters in the first iteration.
+  // However, an experiment has shown that this does not hurt learning at all
+  // and thus is purely beneficial for performance.
 
   // Indices of all items rated by u for each user u in the local U slice
   std::vector<arma::uvec> RuLocal(nUsersLocal);

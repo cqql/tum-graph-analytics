@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cmath>
+#include <map>
 #include <vector>
 
 #include "../../util/table.h"
@@ -8,6 +11,13 @@ namespace gaml {
 namespace mf {
 
 namespace koren {
+
+// A sign function from
+// http://stackoverflow.com/questions/1903954/is-there-a-standard-sign-function-signum-sgn-in-c-c
+template <typename T>
+int sgn(T val) {
+  return (T(0) < val) - (val < T(0));
+}
 
 // Subtract b from all non-zero entries of A
 arma::sp_fmat operator-(const arma::sp_fmat& A, const float& b) {
@@ -22,18 +32,21 @@ arma::sp_fmat operator-(const arma::sp_fmat& A, const float& b) {
 
 std::tuple<float, arma::fvec, arma::fvec, arma::fmat, arma::fmat, arma::fmat>
 Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
-               const arma::sp_fmat uSlice, const int uOffset, const int k) {
+               const arma::sp_fmat uSlice, const arma::sp_fmat tSlice,
+               const int uOffset, const int k) {
   const auto rank = this->rank;
   const auto nranks = this->nranks;
   const auto lambdab = this->lambdab;
   const auto lambdaqpy = this->lambdaqpy;
   auto gammab = this->gammab;
   auto gammaqpy = this->gammaqpy;
+  const auto beta = this->beta;
   const auto atol = this->atol;
   const auto rtol = this->rtol;
   auto muTable = this->muTable;
   auto biTable = this->biTable;
   auto buTable = this->buTable;
+  auto alphaTable = this->alphaTable;
   auto qTable = this->qTable;
   auto yTable = this->yTable;
   auto pTable = this->pTable;
@@ -74,6 +87,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   // Initialize all the parameters
   arma::fvec bi(nItems, arma::fill::randn);
   arma::fvec bu(nUsers, arma::fill::randn);
+  arma::fvec alpha(nUsers, arma::fill::zeros);
   arma::fmat q(k, nItems, arma::fill::randn);
   arma::fmat p(k, nUsers, arma::fill::randn);
   arma::fmat y(k, nItems, arma::fill::randn);
@@ -82,6 +96,15 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   // that each worker uses a different set of parameters in the first iteration.
   // However, an experiment has shown that this does not hurt learning at all
   // and thus is purely beneficial for performance.
+
+  // Mean time of rating per user
+  arma::fvec tU(nUsersLocal);
+  for (int i = 0; i < nUsersLocal; ++i) {
+    // Number of non-zero entries in this column
+    const int nnz = tSlice.col_ptrs[i + 1] - tSlice.col_ptrs[i];
+
+    tU[i] = arma::mean(arma::fvec(&tSlice.values[tSlice.col_ptrs[i]], nnz));
+  }
 
   // Indices of all items rated by u for each user u in the local U slice
   std::vector<arma::uvec> RuLocal(nUsersLocal);
@@ -125,6 +148,39 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     }
   }
 
+  // Time deviations of each rating
+  arma::fvec deviations(uSlice.n_nonzero);
+  {
+    int index = 0;
+    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
+         it != end; ++it, ++index) {
+      const int i = it.row();
+      const int u = it.col();
+      const float tDev = tSlice(i, u) - tU(u);
+
+      deviations(index) = sgn(tDev) * std::pow(std::abs(tDev), beta);
+    }
+  }
+  arma::sp_fmat dev(uLocations, deviations);
+
+  // Parameters for each day and user to capture sudden drifts (spikes)
+  std::vector<int> dayCount(nUsersLocal);
+  std::vector<std::map<int, int>> dayToIndex(nUsersLocal);
+  for (arma::sp_fmat::const_iterator it = tSlice.begin(), end = tSlice.end();
+       it != end; ++it) {
+    const int i = it.row();
+    const int u = it.col();
+    const int t = (int)*it;
+    auto& map = dayToIndex[u];
+
+    if (map.find(t) == map.end()) {
+      map[t] = dayCount[u];
+      dayCount[u] += 1;
+    }
+  }
+  int maxDays = *std::max_element(dayCount.begin(), dayCount.end());
+  arma::fmat b_ut(nUsersLocal, maxDays, arma::fill::zeros);
+
   // Values from previous iteration to compute the diff against for updates
   float prevSE = 0.0;
   float prevMSE = 0.0;
@@ -145,11 +201,13 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
            it != end; ++it, ++index) {
         const arma::uword i = it.row();
         const arma::uword u = it.col();
+        const arma::uword uGlobal = u + uOffset;
 
         uErrors(index) =
-            *it - mu - bi(i) - bu(u + uOffset) -
+            *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
+            b_ut(u, dayToIndex[u][(int)tSlice(i, u)]) -
             arma::dot(q.col(i),
-                      p.col(u + uOffset) +
+                      p.col(uGlobal) +
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
       }
     }
@@ -160,6 +218,19 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     const arma::fvec buGrad =
         2 * (lambdab * nRuLocal % bu.rows(uOffset, uOffset + nUsersLocal - 1) -
              arma::sum(uE, 0).t());
+    const arma::fvec alphaGrad =
+        2 *
+        (lambdab * nRuLocal % alpha.rows(uOffset, uOffset + nUsersLocal - 1) -
+         arma::sum(dev % uE, 0).t());
+    arma::fmat b_utGrad(nUsersLocal, maxDays);
+    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
+         it != end; ++it) {
+      const int i = it.row();
+      const int u = it.col();
+      const int tInd = dayToIndex[u][(int)tSlice(i, u)];
+
+      b_utGrad(u, tInd) += 2 * (lambdab * b_utGrad(u, tInd) - *it);
+    }
 
     arma::fmat qGrad(k, nItems);
     arma::fmat pGrad(k, nUsersLocal);
@@ -198,6 +269,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Compute update steps
     const arma::fvec biStep = -gammab * biGrad;
     const arma::fvec buStep = -gammab * buGrad;
+    const arma::fvec alphaStep = -(gammab / 10000) * alphaGrad;
+    const arma::fmat b_utStep = -gammab * b_utGrad;
     const arma::fmat qStep = -gammaqpy * qGrad;
     const arma::fmat pStep = -gammaqpy * pGrad;
     const arma::fmat yStep = -gammaqpy * yGrad;
@@ -205,6 +278,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Update tables with steps
     this->stepTable(biTable, biStep, 0, 0);
     this->stepTable(buTable, buStep, 0, uOffset);
+    this->stepTable(alphaTable, alphaStep, 0, uOffset);
     this->stepTable(qTable, qStep.t(), 0, 0);
     this->stepTable(pTable, pStep.t(), 0, uOffset);
     this->stepTable(yTable, yStep.t(), 0, 0);
@@ -214,9 +288,13 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Load updated parameters
     bi = gaml::util::table::loadMatrix(biTable, nItems, 1);
     bu = gaml::util::table::loadMatrix(buTable, nUsers, 1);
+    alpha = gaml::util::table::loadMatrix(alphaTable, nUsers, 1);
     q = gaml::util::table::loadMatrix(qTable, nItems, k).t();
     p = gaml::util::table::loadMatrix(pTable, nUsers, k).t();
     y = gaml::util::table::loadMatrix(yTable, nItems, k).t();
+
+    // This one is applied directly because it is used purely locally
+    b_ut += b_utStep;
 
     // Compute the Squared Error for logging
     float se = 0.0;
@@ -224,10 +302,12 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
          it != end; ++it) {
       const arma::uword i = it.row();
       const arma::uword u = it.col();
+      const arma::uword uGlobal = u + uOffset;
       const float error =
-          *it - mu - bi(i) - bu(u + uOffset) -
+          *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
+          b_ut(u, dayToIndex[u][(int)tSlice(i, u)]) -
           arma::dot(q.col(i),
-                    p.col(u + uOffset) +
+                    p.col(uGlobal) +
                         isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
 
       se += error * error;
@@ -263,9 +343,10 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 }
 
 void Worker::initTables(int muTableId, int biTableId, int buTableId,
-                        int qTableId, int pTableId, int yTableId, int seTableId,
-                        int floatRowType, int intRowType, int k, int nItems,
-                        int nUsers, int nranks) {
+                        int alphaTableId, int qTableId, int pTableId,
+                        int yTableId, int seTableId, int floatRowType,
+                        int intRowType, int k, int nItems, int nUsers,
+                        int nranks) {
   petuum::ClientTableConfig muConfig;
   muConfig.table_info.row_type = floatRowType;
   muConfig.table_info.row_capacity = nranks;
@@ -307,6 +388,20 @@ void Worker::initTables(int muTableId, int biTableId, int buTableId,
   buConfig.thread_cache_capacity = 1;
   buConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(buTableId, buConfig);
+
+  petuum::ClientTableConfig alphaConfig;
+  alphaConfig.table_info.row_type = floatRowType;
+  alphaConfig.table_info.row_capacity = nUsers;
+  alphaConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
+  alphaConfig.table_info.table_staleness = 0;
+  alphaConfig.table_info.oplog_dense_serialized = true;
+  alphaConfig.table_info.dense_row_oplog_capacity =
+      alphaConfig.table_info.row_capacity;
+  alphaConfig.process_cache_capacity = 1;
+  alphaConfig.oplog_capacity = 1;
+  alphaConfig.thread_cache_capacity = 1;
+  alphaConfig.process_storage_type = petuum::BoundedDense;
+  petuum::PSTableGroup::CreateTable(alphaTableId, alphaConfig);
 
   petuum::ClientTableConfig qConfig;
   qConfig.table_info.row_type = floatRowType;

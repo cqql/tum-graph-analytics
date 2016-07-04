@@ -16,20 +16,23 @@ class Worker {
  public:
   Worker(const int rank, const int nranks, const float lambdab,
          const float lambdaqpy, const float gammab, const float gammaqpy,
-         const float atol, const float rtol, const int muTableId,
-         const int biTableId, const int buTableId, const int qTableId,
-         const int pTableId, const int yTableId, const int seTableId)
+         const float beta, const float atol, const float rtol,
+         const int muTableId, const int biTableId, const int buTableId,
+         const int alphaTableId, const int qTableId, const int pTableId,
+         const int yTableId, const int seTableId)
       : rank(rank),
         nranks(nranks),
         lambdab(lambdab),
         lambdaqpy(lambdaqpy),
         gammab(gammab),
         gammaqpy(gammaqpy),
+        beta(beta),
         atol(atol),
         rtol(rtol),
         muTable(petuum::PSTableGroup::GetTableOrDie<float>(muTableId)),
         biTable(petuum::PSTableGroup::GetTableOrDie<float>(biTableId)),
         buTable(petuum::PSTableGroup::GetTableOrDie<float>(buTableId)),
+        alphaTable(petuum::PSTableGroup::GetTableOrDie<float>(alphaTableId)),
         qTable(petuum::PSTableGroup::GetTableOrDie<float>(qTableId)),
         pTable(petuum::PSTableGroup::GetTableOrDie<float>(pTableId)),
         yTable(petuum::PSTableGroup::GetTableOrDie<float>(yTableId)),
@@ -37,12 +40,14 @@ class Worker {
 
   std::tuple<float, arma::fvec, arma::fvec, arma::fmat, arma::fmat, arma::fmat>
   factor(const arma::sp_fmat iSlice, const int iOffset,
-         const arma::sp_fmat uSlice, const int uOffset, const int k);
+         const arma::sp_fmat uSlice, const arma::sp_fmat tSlice,
+         const int uOffset, const int k);
 
   static void initTables(int muTableId, int biTableId, int buTableId,
-                         int qTableId, int pTableId, int yTableId,
-                         int seTableId, int floatRowType, int intRowType, int k,
-                         int nItems, int nUsers, int nranks);
+                         int alphaTableId, int qTableId, int pTableId,
+                         int yTableId, int seTableId, int floatRowType,
+                         int intRowType, int k, int nItems, int nUsers,
+                         int nranks);
 
  private:
   const int rank;
@@ -51,11 +56,13 @@ class Worker {
   const float lambdaqpy;
   const float gammab;
   const float gammaqpy;
+  const float beta;
   const float atol;
   const float rtol;
   petuum::Table<float> muTable;
   petuum::Table<float> biTable;
   petuum::Table<float> buTable;
+  petuum::Table<float> alphaTable;
   petuum::Table<float> qTable;
   petuum::Table<float> pTable;
   petuum::Table<float> yTable;

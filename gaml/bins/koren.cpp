@@ -18,7 +18,7 @@
 
 enum RowType { FLOAT, INT };
 
-enum Table { MU, BI, BU, Q, P, Y, SE };
+enum Table { MU, BI, BU, ALPHA, Q, P, Y, SE };
 
 namespace po = boost::program_options;
 
@@ -34,13 +34,15 @@ struct KorenThread {
   float lambdaqpy;
   float gammab;
   float gammaqpy;
+  float beta;
   float atol;
   float rtol;
   float alpha;
 
   KorenThread(int nranks, int rank, int localRank, std::string path, int k,
               int iterations, int seed, float lambdab, float lambdaqpy,
-              float gammab, float gammaqpy, float atol, float rtol, float alpha)
+              float gammab, float gammaqpy, float beta, float atol, float rtol,
+              float alpha)
       : nranks(nranks),
         rank(rank),
         localRank(localRank),
@@ -52,6 +54,7 @@ struct KorenThread {
         lambdaqpy(lambdaqpy),
         gammab(gammab),
         gammaqpy(gammaqpy),
+        beta(beta),
         atol(atol),
         rtol(rtol),
         alpha(alpha) {}
@@ -63,20 +66,25 @@ struct KorenThread {
         this->path + "/rank-" + std::to_string(this->localRank) + "-prod";
     std::string userpath =
         this->path + "/rank-" + std::to_string(this->localRank) + "-user";
+    std::string tUpath =
+        this->path + "/rank-" + std::to_string(this->localRank) + "-user-time";
     struct gaml::io::MatrixSlice itemms =
         gaml::io::MatrixSlice::parse(itempath);
     struct gaml::io::MatrixSlice userms =
         gaml::io::MatrixSlice::parse(userpath);
+    struct gaml::io::MatrixSlice timems = gaml::io::MatrixSlice::parse(tUpath);
     int iOffset = itemms.offset;
     int uOffset = userms.offset;
     auto iSlice = itemms.R;
     auto uSlice = userms.R;
+    auto tSlice = timems.R;
 
     gaml::mf::koren::Worker worker(
         this->rank, this->nranks, this->lambdab, this->lambdaqpy, this->gammab,
-        this->gammaqpy, this->atol, this->rtol, Table::MU, Table::BI, Table::BU,
-        Table::Q, Table::P, Table::Y, Table::SE);
-    auto factors = worker.factor(iSlice, iOffset, uSlice, uOffset, k);
+        this->gammaqpy, this->beta, this->atol, this->rtol, Table::MU,
+        Table::BI, Table::BU, Table::ALPHA, Table::Q, Table::P, Table::Y,
+        Table::SE);
+    auto factors = worker.factor(iSlice, iOffset, uSlice, tSlice, uOffset, k);
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
     auto bu = std::get<2>(factors);
@@ -118,6 +126,8 @@ int main(int argc, char** argv) {
        "Minimum absolute MSE improvement before termination")
       ("rtol", po::value<float>()->default_value(0.01),
        "Minimum relative MSE improvement before termination")
+      ("beta", po::value<float>()->default_value(0.4),
+       "beta-parameters for time-dependent b_u")
       ("gamma", po::value<float>()->default_value(1.0),
        "GD step length")
       ("gamma-b", po::value<float>()->default_value(0.007),
@@ -146,6 +156,7 @@ int main(int argc, char** argv) {
   int seed = vm["seed"].as<int>();
   float atol = vm["atol"].as<float>();
   float rtol = vm["rtol"].as<float>();
+  float beta = vm["beta"].as<float>();
   float gamma = vm["gamma"].as<float>();
   float gammab = vm["gamma-b"].as<float>();
   float gammaqpy = vm["gamma-qpy"].as<float>();
@@ -164,7 +175,7 @@ int main(int argc, char** argv) {
   table_group_config.host_map.insert(
       std::make_pair(0, petuum::HostInfo(0, "127.0.0.1", "10000")));
   table_group_config.consistency_model = petuum::SSP;
-  table_group_config.num_tables = 7;
+  table_group_config.num_tables = 8;
   table_group_config.num_total_clients = num_clients;
   table_group_config.num_local_app_threads = num_workers + 1;
   // Somehow a larger number than 1 leads to hanging at the end while the main
@@ -175,9 +186,10 @@ int main(int argc, char** argv) {
   petuum::PSTableGroup::Init(table_group_config, false);
 
   // Create tables
-  gaml::mf::koren::Worker::initTables(
-      Table::MU, Table::BI, Table::BU, Table::Q, Table::P, Table::Y, Table::SE,
-      RowType::FLOAT, RowType::INT, k, nItems, nUsers, nranks);
+  gaml::mf::koren::Worker::initTables(Table::MU, Table::BI, Table::BU,
+                                      Table::ALPHA, Table::Q, Table::P,
+                                      Table::Y, Table::SE, RowType::FLOAT,
+                                      RowType::INT, k, nItems, nUsers, nranks);
 
   petuum::PSTableGroup::CreateTableDone();
 
@@ -191,7 +203,7 @@ int main(int argc, char** argv) {
         &KorenThread::run,
         std::unique_ptr<KorenThread>(new KorenThread(
             nranks, rank, i, datapath, k, iterations, seed + i, lambdab,
-            lambdaqpy, gammab, gammaqpy, atol, rtol, 0.0)));
+            lambdaqpy, gammab, gammaqpy, beta, atol, rtol, 0.0)));
   }
 
   for (auto& thread : threads) {

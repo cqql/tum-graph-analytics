@@ -258,8 +258,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
 void Worker::initTables(int muTableId, int biTableId, int buTableId,
                         int qTableId, int pTableId, int yTableId, int seTableId,
-                        int floatRowType, int intRowType, int k, int nnz,
-                        int maxFill, int nItems, int nUsers, int nranks) {
+                        int floatRowType, int intRowType, int k, int nItems,
+                        int nUsers, int nranks) {
   petuum::ClientTableConfig muConfig;
   muConfig.table_info.row_type = floatRowType;
   muConfig.table_info.row_capacity = nranks;

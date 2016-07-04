@@ -114,9 +114,6 @@ int main(int argc, char** argv) {
       ("users", po::value<int>(), "Number of users")
       ("items", po::value<int>(), "Number of items")
       ("seed", po::value<int>()->default_value(0), "Random seed")
-      ("nnz", po::value<int>(), "Number of ratings")
-      ("max-fill", po::value<int>(),
-       "Maximum fill in any column of R")
       ("atol", po::value<float>()->default_value(0.01),
        "Minimum absolute MSE improvement before termination")
       ("rtol", po::value<float>()->default_value(0.01),
@@ -147,8 +144,6 @@ int main(int argc, char** argv) {
   int nUsers = vm["users"].as<int>();
   int nItems = vm["items"].as<int>();
   int seed = vm["seed"].as<int>();
-  int nnz = vm["nnz"].as<int>();
-  int maxFill = vm["max-fill"].as<int>();
   float atol = vm["atol"].as<float>();
   float rtol = vm["rtol"].as<float>();
   float gamma = vm["gamma"].as<float>();
@@ -182,7 +177,7 @@ int main(int argc, char** argv) {
   // Create tables
   gaml::mf::koren::Worker::initTables(
       Table::MU, Table::BI, Table::BU, Table::Q, Table::P, Table::Y, Table::SE,
-      RowType::FLOAT, RowType::INT, k, nnz, maxFill, nItems, nUsers, nranks);
+      RowType::FLOAT, RowType::INT, k, nItems, nUsers, nranks);
 
   petuum::PSTableGroup::CreateTableDone();
 

@@ -42,8 +42,7 @@ class Worker {
   static void initTables(int muTableId, int biTableId, int buTableId,
                          int qTableId, int pTableId, int yTableId,
                          int seTableId, int floatRowType, int intRowType, int k,
-                         int nnz, int maxFill, int nItems, int nUsers,
-                         int nranks);
+                         int nItems, int nUsers, int nranks);
 
  private:
   const int rank;

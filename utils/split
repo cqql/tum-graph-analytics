@@ -178,9 +178,6 @@ def main():
     # Transpose user splits back
     usersplits = [(ofs, split.transpose()) for ofs, split in usersplits]
 
-    print("nnz =", R.nnz)
-    print("max-fill =", max(R.getnnz(axis=0)))
-
     if args.verbose:
         print("Splits by product")
         for i in range(args.k):

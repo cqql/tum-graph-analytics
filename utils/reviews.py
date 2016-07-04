@@ -23,13 +23,12 @@ def parse(path):
         User IDs in the order of columns of R
     R : numpy array
         Sparse scipy products*users matrix of ratings (COO format)
+    T : numpy array
+        Sparse scipy products*users matrix of rating times (COO format)
     """
     data = pandas.read_csv(path,
                            header=None,
                            names=["User", "Product", "Rating", "Timestamp"])
-
-    # Cut off timestamp
-    data = data[["User", "Product", "Rating"]]
 
     # Store all users and products
     users = data["User"].sort_values().unique()
@@ -39,12 +38,23 @@ def parse(path):
     userkeys = {users[i]: i for i in range(users.size)}
     productkeys = {products[i]: i for i in range(products.size)}
 
-    locations = (data["Rating"],
-                 ([productkeys[p] for p in data["Product"]],
-                  [userkeys[u] for u in data["User"]])) # yapf: disable
-    R = scipy.sparse.coo_matrix(locations, shape=(len(products), len(users)))
+    # Normalize timestamps
+    data["Timestamp"] -= data["Timestamp"].mean()
 
-    return (products, users, R)
+    # Convert from seconds to days
+    data["Timestamp"] /= 60 * 60 * 24
+
+    rlocations = (data["Rating"],
+                  ([productkeys[p] for p in data["Product"]],
+                   [userkeys[u] for u in data["User"]])) # yapf: disable
+    R = scipy.sparse.coo_matrix(rlocations, shape=(len(products), len(users)))
+
+    tlocations = (data["Timestamp"],
+                  ([productkeys[p] for p in data["Product"]],
+                   [userkeys[u] for u in data["User"]])) # yapf: disable
+    T = scipy.sparse.coo_matrix(tlocations, shape=(len(products), len(users)))
+
+    return (products, users, R, T)
 
 
 def generate(out, A, rows=None, cols=None):

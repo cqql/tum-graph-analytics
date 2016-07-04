@@ -198,18 +198,18 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Update tables with steps
     this->stepTable(biTable, biStep, 0, 0);
     this->stepTable(buTable, buStep, 0, uOffset);
-    this->stepTable(qTable, qStep, 0, 0);
-    this->stepTable(pTable, pStep, uOffset, 0);
-    this->stepTable(yTable, yStep, 0, 0);
+    this->stepTable(qTable, qStep.t(), 0, 0);
+    this->stepTable(pTable, pStep.t(), 0, uOffset);
+    this->stepTable(yTable, yStep.t(), 0, 0);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Load updated parameters
     bi = gaml::util::table::loadMatrix(biTable, nItems, 1);
     bu = gaml::util::table::loadMatrix(buTable, nUsers, 1);
-    q = gaml::util::table::loadMatrix(qTable, k, nItems);
-    p = gaml::util::table::loadMatrix(pTable, k, nUsers);
-    y = gaml::util::table::loadMatrix(yTable, k, nItems);
+    q = gaml::util::table::loadMatrix(qTable, nItems, k).t();
+    p = gaml::util::table::loadMatrix(pTable, nUsers, k).t();
+    y = gaml::util::table::loadMatrix(yTable, nItems, k).t();
 
     // Compute the Squared Error for logging
     float se = 0.0;
@@ -304,39 +304,39 @@ void Worker::initTables(int muTableId, int biTableId, int buTableId,
 
   petuum::ClientTableConfig qConfig;
   qConfig.table_info.row_type = floatRowType;
-  qConfig.table_info.row_capacity = k;
+  qConfig.table_info.row_capacity = nItems;
   qConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
   qConfig.table_info.table_staleness = 0;
   qConfig.table_info.oplog_dense_serialized = true;
   qConfig.table_info.dense_row_oplog_capacity = qConfig.table_info.row_capacity;
-  qConfig.process_cache_capacity = nItems;
-  qConfig.oplog_capacity = nItems;
+  qConfig.process_cache_capacity = k;
+  qConfig.oplog_capacity = k;
   qConfig.thread_cache_capacity = 1;
   qConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(qTableId, qConfig);
 
   petuum::ClientTableConfig pConfig;
   pConfig.table_info.row_type = floatRowType;
-  pConfig.table_info.row_capacity = k;
+  pConfig.table_info.row_capacity = nUsers;
   pConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
   pConfig.table_info.table_staleness = 0;
   pConfig.table_info.oplog_dense_serialized = true;
   pConfig.table_info.dense_row_oplog_capacity = pConfig.table_info.row_capacity;
-  pConfig.process_cache_capacity = nUsers;
-  pConfig.oplog_capacity = nUsers;
+  pConfig.process_cache_capacity = k;
+  pConfig.oplog_capacity = k;
   pConfig.thread_cache_capacity = 1;
   pConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(pTableId, pConfig);
 
   petuum::ClientTableConfig yConfig;
   yConfig.table_info.row_type = floatRowType;
-  yConfig.table_info.row_capacity = k;
+  yConfig.table_info.row_capacity = nItems;
   yConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
   yConfig.table_info.table_staleness = 0;
   yConfig.table_info.oplog_dense_serialized = true;
   yConfig.table_info.dense_row_oplog_capacity = yConfig.table_info.row_capacity;
-  yConfig.process_cache_capacity = nUsers;
-  yConfig.oplog_capacity = nUsers;
+  yConfig.process_cache_capacity = k;
+  yConfig.oplog_capacity = k;
   yConfig.thread_cache_capacity = 1;
   yConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(yTableId, yConfig);

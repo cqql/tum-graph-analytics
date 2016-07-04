@@ -140,7 +140,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
         const arma::uword u = it.col();
 
         uErrors(index) =
-            *it - bi(i) - bu(u) -
+            *it - bi(i) - bu(u + uOffset) -
             arma::dot(q.col(i),
                       p.col(u + uOffset) +
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
@@ -219,7 +219,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
       const arma::uword i = it.row();
       const arma::uword u = it.col();
       const float error =
-          *it - bi(i) - bu(u) -
+          *it - bi(i) - bu(u + uOffset) -
           arma::dot(q.col(i),
                     p.col(u + uOffset) +
                         isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));

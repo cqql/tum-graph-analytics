@@ -18,7 +18,7 @@
 
 enum RowType { FLOAT, INT };
 
-enum Table { MU, BI, BU, Q, P, Y, ERROR, NRU, RU, SE };
+enum Table { MU, BI, BU, Q, P, Y, SE };
 
 namespace po = boost::program_options;
 
@@ -75,8 +75,7 @@ struct KorenThread {
     gaml::mf::koren::Worker worker(
         this->rank, this->nranks, this->lambdab, this->lambdaqpy, this->gammab,
         this->gammaqpy, this->atol, this->rtol, Table::MU, Table::BI, Table::BU,
-        Table::Q, Table::P, Table::Y, Table::ERROR, Table::NRU, Table::RU,
-        Table::SE);
+        Table::Q, Table::P, Table::Y, Table::SE);
     auto factors = worker.factor(iSlice, iOffset, uSlice, uOffset, k);
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
@@ -170,7 +169,7 @@ int main(int argc, char** argv) {
   table_group_config.host_map.insert(
       std::make_pair(0, petuum::HostInfo(0, "127.0.0.1", "10000")));
   table_group_config.consistency_model = petuum::SSP;
-  table_group_config.num_tables = 10;
+  table_group_config.num_tables = 7;
   table_group_config.num_total_clients = num_clients;
   table_group_config.num_local_app_threads = num_workers + 1;
   // Somehow a larger number than 1 leads to hanging at the end while the main
@@ -182,9 +181,8 @@ int main(int argc, char** argv) {
 
   // Create tables
   gaml::mf::koren::Worker::initTables(
-      Table::MU, Table::BI, Table::BU, Table::Q, Table::P, Table::Y,
-      Table::ERROR, Table::NRU, Table::RU, Table::SE, RowType::FLOAT,
-      RowType::INT, k, nnz, maxFill, nItems, nUsers, nranks);
+      Table::MU, Table::BI, Table::BU, Table::Q, Table::P, Table::Y, Table::SE,
+      RowType::FLOAT, RowType::INT, k, nnz, maxFill, nItems, nUsers, nranks);
 
   petuum::PSTableGroup::CreateTableDone();
 

@@ -37,9 +37,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   auto qTable = this->qTable;
   auto yTable = this->yTable;
   auto pTable = this->pTable;
-  auto errorTable = this->errorTable;
-  auto nruTable = this->nruTable;
-  auto ruTable = this->ruTable;
   auto seTable = this->seTable;
 
   const auto nItems = uSlice.n_rows;
@@ -67,7 +64,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   const float mu = totalSum / nnz;
 
   // Normalize the local slices
-  const arma::sp_fmat nISlice = iSlice - mu;
   const arma::sp_fmat nUSlice = uSlice - mu;
 
   // Initialize all the parameters
@@ -95,76 +91,20 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   // And their inverse square roots (i.e. ^-1/2)
   const arma::uvec isqNRuLocal = 1 / arma::sqrt(nRuLocal);
 
-  // Finally the same for all items in the local I slice
-  std::vector<arma::uvec> RiLocal(nItemsLocal);
-  // Number of users that rated item i
-  arma::uvec nRiLocal(nItemsLocal);
+  // Finally the same for all items in the local U slice
+  std::vector<arma::uvec> RiLocal(nItems);
+  // Number of local users that rated item i
+  arma::uvec nRiLocal(nItems);
 
-  // Transpose the I slice so that we can easily compute this
-  const arma::sp_fmat nISliceT = nISlice.t();
-  for (int i = 0; i < nItemsLocal; ++i) {
+  // Transpose the U slice so that we can easily compute this
+  const arma::sp_fmat nUSliceT = nUSlice.t();
+  for (int i = 0; i < nItems; ++i) {
     // Number of non-zero entries in this column
-    const int nnz = nISliceT.col_ptrs[i + 1] - nISliceT.col_ptrs[i];
+    const int nnz = nUSliceT.col_ptrs[i + 1] - nUSliceT.col_ptrs[i];
 
-    RiLocal[i] = arma::uvec(&nISliceT.row_indices[nISliceT.col_ptrs[i]], nnz);
+    RiLocal[i] = arma::uvec(&nUSliceT.row_indices[nUSliceT.col_ptrs[i]], nnz);
     nRiLocal(i) = nnz;
   }
-
-  // Synchronize Ru and nRu
-  for (int u = 0; u < nUsersLocal; u++) {
-    nruTable.Inc(0, uOffset + u, nRuLocal(u));
-
-    petuum::DenseUpdateBatch<int> batch(0, nRuLocal(u));
-    for (int j = 0; j < nRuLocal(u); ++j) {
-      // Copy manually to convert from arma::uword to int
-      batch[j] = (int)RuLocal[u](j);
-    }
-    ruTable.DenseBatchInc(u + uOffset, batch);
-  }
-
-  petuum::PSTableGroup::GlobalBarrier();
-
-  // Load global nRu and Ru
-  arma::uvec nRu(nUsers);
-  {
-    std::vector<int> buf;
-    petuum::RowAccessor rowacc;
-    const auto& col = nruTable.Get<petuum::DenseRow<int>>(0, &rowacc);
-    col.CopyToVector(&buf);
-
-    // Copy manually again to convert back to arma::uword
-    for (int j = 0; j < nUsers; ++j) {
-      nRu(j) = (arma::uword)buf[j];
-    }
-  }
-
-  std::vector<arma::uvec> Ru(nUsers);
-
-  for (int u = 0; u < nUsers; ++u) {
-    std::vector<int> buf;
-    petuum::RowAccessor rowacc;
-    const auto& col = ruTable.Get<petuum::DenseRow<int>>(u, &rowacc);
-    col.CopyToVector(&buf);
-
-    Ru[u] = arma::uvec(nRu(u));
-
-    // Copy manually again to convert back to arma::uword
-    for (int j = 0; j < nRu(u); ++j) {
-      Ru[u](j) = (arma::uword)buf[j];
-    }
-  }
-
-  const arma::uvec isqNRu = 1 / arma::sqrt(nRu);
-
-  // nRu and Ru actually tell us the coordinates of all entries of R. We will
-  // use this later to synchronize the global error values.
-
-  // Column pointers into E in CSC layout
-  arma::uvec eColPtrs = arma::shift(arma::cumsum(nRu), 1);
-  eColPtrs(0) = 0;
-
-  // Total number of entries in earlier slices
-  const arma::uword uEntryOffset = eColPtrs(uOffset);
 
   // Cache the locations of entries in the local U slice
   arma::umat uLocations(2, nUSlice.n_nonzero);
@@ -178,20 +118,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     }
   }
 
-  // Cache the locations of entries in the local I slice
-  arma::umat iLocations(2, nISlice.n_nonzero);
-  {
-    int index = 0;
-    for (arma::sp_fmat::const_iterator it = nISlice.begin(),
-                                       end = nISlice.end();
-         it != end; ++it, ++index) {
-      iLocations(0, index) = it.row();
-      iLocations(1, index) = it.col();
-    }
-  }
-
   // Values from previous iteration to compute the diff against for updates
-  arma::fvec uErrorsPrev(nUSlice.n_nonzero, arma::fill::zeros);
   float prevSE = 0.0;
   float prevMSE = 0.0;
   float aimprov = 0.0;
@@ -221,76 +148,32 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     }
     const arma::sp_fmat uE(uLocations, uErrors);
 
-    // Synchronize the global E matrix with our local uE slice
-    {
-      const arma::fmat uErrorsDiff = uErrors - uErrorsPrev;
-      petuum::DenseUpdateBatch<float> batch(uEntryOffset, nUSlice.n_nonzero);
-      std::memcpy(batch.get_mem(), uErrorsDiff.memptr(),
-                  nUSlice.n_nonzero * sizeof(float));
-      errorTable.DenseBatchInc(0, batch);
-      uErrorsPrev = uErrors;
-    }
-
-    petuum::PSTableGroup::GlobalBarrier();
-
-    // Load the submatrix of E that coincides with our local I slice
-    arma::fvec iErrors(nISlice.n_nonzero);
-    {
-      std::vector<float> buf;
-      petuum::RowAccessor rowacc;
-      const auto& col = errorTable.Get<petuum::DenseRow<float>>(0, &rowacc);
-      col.CopyToVector(&buf);
-
-      for (int j = 0; j < nISlice.n_nonzero; ++j) {
-        const int i = iLocations(0, j) + iOffset;
-        const int u = iLocations(1, j);
-
-        // buf is E in CSC storage format, so we look into the u-th column and
-        // then find entry in the compressed column that corresponds to row i
-        for (int a = 0; a < nRu(u); ++a) {
-          if (Ru[u](a) == i) {
-            iErrors(j) = buf[eColPtrs[u] + a];
-            goto CONTINUE_OUTER;
-          }
-        }
-
-        std::cout << "Did not find entry (" << i << ", " << u << ") in E"
-                  << std::endl;
-
-      CONTINUE_OUTER:;
-      }
-    }
-    const arma::sp_fmat iE(iLocations, iErrors);
-
-    // Compute gradients of the locally managed parameters
-    const arma::fvec biGrad =
-        2 * (lambdab * nRiLocal % bi.rows(iOffset, iOffset + nItemsLocal - 1) -
-             arma::sum(iE, 1));
+    // Compute (partial) gradients
+    const arma::fvec biGrad = 2 * (lambdab * nRiLocal % bi - arma::sum(uE, 1));
     const arma::fvec buGrad =
         2 * (lambdab * nRuLocal % bu.rows(uOffset, uOffset + nUsersLocal - 1) -
              arma::sum(uE, 0).t());
 
-    arma::fmat qGrad(k, nItemsLocal);
+    arma::fmat qGrad(k, nItems);
     arma::fmat pGrad(k, nUsersLocal);
-    arma::fmat yGrad(k, nItemsLocal);
+    arma::fmat yGrad(k, nItems);
 
-    for (int i = 0; i < nItemsLocal; ++i) {
+    for (int i = 0; i < nItems; ++i) {
       // Maybe use arma::cols for subview of p
-      qGrad.col(i) = nRiLocal(i) * lambdaqpy * q.col(i + iOffset);
+      qGrad.col(i) = nRiLocal(i) * lambdaqpy * q.col(i);
 
       for (const auto u : RiLocal[i]) {
         qGrad.col(i) -=
-            iE(i, u) *
-            (p.col(u) + isqNRu(u) * iE(i, u) * arma::sum(y.cols(Ru[u]), 1));
+            uE(i, u) * (p.col(u + uOffset) +
+                        isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
       }
 
       float prefactor = 0.0;
       for (const auto u : RiLocal[i]) {
-        prefactor += isqNRu(u) * iE(i, u);
+        prefactor += isqNRuLocal(u) * uE(i, u);
       }
 
-      yGrad.col(i) = nRiLocal(i) * lambdaqpy * y.col(i + iOffset) -
-                     prefactor * q.col(i + iOffset);
+      yGrad.col(i) = nRiLocal(i) * lambdaqpy * y.col(i) - prefactor * q.col(i);
     }
 
     for (int u = 0; u < nUsersLocal; ++u) {
@@ -313,11 +196,11 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     const arma::fmat yStep = -gammaqpy * yGrad;
 
     // Update tables with steps
-    this->stepTable(biTable, biStep, 0, iOffset);
+    this->stepTable(biTable, biStep, 0, 0);
     this->stepTable(buTable, buStep, 0, uOffset);
-    this->stepTable(qTable, qStep, iOffset, 0);
+    this->stepTable(qTable, qStep, 0, 0);
     this->stepTable(pTable, pStep, uOffset, 0);
-    this->stepTable(yTable, yStep, iOffset, 0);
+    this->stepTable(yTable, yStep, 0, 0);
 
     petuum::PSTableGroup::GlobalBarrier();
 
@@ -374,11 +257,9 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 }
 
 void Worker::initTables(int muTableId, int biTableId, int buTableId,
-                        int qTableId, int pTableId, int yTableId,
-                        int errorTableId, int nruTableId, int ruTableId,
-                        int seTableId, int floatRowType, int intRowType, int k,
-                        int nnz, int maxFill, int nItems, int nUsers,
-                        int nranks) {
+                        int qTableId, int pTableId, int yTableId, int seTableId,
+                        int floatRowType, int intRowType, int k, int nnz,
+                        int maxFill, int nItems, int nUsers, int nranks) {
   petuum::ClientTableConfig muConfig;
   muConfig.table_info.row_type = floatRowType;
   muConfig.table_info.row_capacity = nranks;
@@ -459,48 +340,6 @@ void Worker::initTables(int muTableId, int biTableId, int buTableId,
   yConfig.thread_cache_capacity = 1;
   yConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(yTableId, yConfig);
-
-  petuum::ClientTableConfig errorConfig;
-  errorConfig.table_info.row_type = floatRowType;
-  errorConfig.table_info.row_capacity = nnz;
-  errorConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
-  errorConfig.table_info.table_staleness = 0;
-  errorConfig.table_info.oplog_dense_serialized = true;
-  errorConfig.table_info.dense_row_oplog_capacity =
-      errorConfig.table_info.row_capacity;
-  errorConfig.process_cache_capacity = 1;
-  errorConfig.oplog_capacity = 1;
-  errorConfig.thread_cache_capacity = 1;
-  errorConfig.process_storage_type = petuum::BoundedDense;
-  petuum::PSTableGroup::CreateTable(errorTableId, errorConfig);
-
-  petuum::ClientTableConfig nruConfig;
-  nruConfig.table_info.row_type = intRowType;
-  nruConfig.table_info.row_capacity = nUsers;
-  nruConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
-  nruConfig.table_info.table_staleness = 0;
-  nruConfig.table_info.oplog_dense_serialized = true;
-  nruConfig.table_info.dense_row_oplog_capacity =
-      nruConfig.table_info.row_capacity;
-  nruConfig.process_cache_capacity = 1;
-  nruConfig.oplog_capacity = 1;
-  nruConfig.thread_cache_capacity = 1;
-  nruConfig.process_storage_type = petuum::BoundedDense;
-  petuum::PSTableGroup::CreateTable(nruTableId, nruConfig);
-
-  petuum::ClientTableConfig ruConfig;
-  ruConfig.table_info.row_type = intRowType;
-  ruConfig.table_info.row_capacity = maxFill;
-  ruConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
-  ruConfig.table_info.table_staleness = 0;
-  ruConfig.table_info.oplog_dense_serialized = true;
-  ruConfig.table_info.dense_row_oplog_capacity =
-      ruConfig.table_info.row_capacity;
-  ruConfig.process_cache_capacity = nUsers;
-  ruConfig.oplog_capacity = nUsers;
-  ruConfig.thread_cache_capacity = 1;
-  ruConfig.process_storage_type = petuum::BoundedDense;
-  petuum::PSTableGroup::CreateTable(ruTableId, ruConfig);
 
   petuum::ClientTableConfig seConfig;
   seConfig.table_info.row_type = floatRowType;

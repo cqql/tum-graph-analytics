@@ -1,11 +1,13 @@
-#ifndef MATRIX_DATA_H_
-#define MATRIX_DATA_H_
+#ifndef GAML_IO_TENSOR_HPP_
+#define GAML_IO_TENSOR_HPP_
 
 #include <string>
 #include <vector>
 
 #include <armadillo>
 
+namespace gaml {
+namespace io {
 
 struct Sparse3dTensor {
   
@@ -26,19 +28,21 @@ struct Sparse3dTensor {
   std::vector<unsigned int> words;
   std::vector<float> vals;
   
-  arma::frowvec getWordBagAt(unsigned int i);
+  arma::frowvec getWordBagAt(unsigned int i) const;
 };
 
 
 // Parse the split tensor data
-struct TensorData {
+struct TensorSlice {
   int offset;
   Sparse3dTensor R;
   
-  static struct TensorData parse(std::string path);
+  static struct TensorSlice parse(std::string path);
   static struct Sparse3dTensor parseTensor(std::ifstream& f);
 };
+} // end io
+} // end gaml
 
+#endif  // GAML_IO_TENSOR_HPP_
 
-#endif  // MATRIX_DATA_H_
 

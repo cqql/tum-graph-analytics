@@ -2,9 +2,26 @@
 
 #include <armadillo>
 
-#include "tensor_data.hpp"
+#include "tensor.hpp"
 
-arma::frowvec Sparse3dTensor::getWordBagAt(unsigned int i){
+namespace gaml {
+namespace io {
+// parse split 
+struct TensorSlice TensorSlice::parse(std::string path) {
+  TensorSlice ts;
+  std::ifstream f(path, std::ios::binary);
+  
+  if (!f.is_open()) {
+    std::cout << path << std::endl;
+    throw std::invalid_argument("Could not open file");
+  }
+  
+  f.read(reinterpret_cast<char*>(&ts.offset), sizeof(offset));
+  ts.R = parseTensor(f);
+  return ts;
+}
+
+arma::frowvec Sparse3dTensor::getWordBagAt(unsigned int i) const{
   arma::frowvec wordbag(n_words, arma::fill::zeros);
   std::size_t start = 0;
   std::size_t end = bags[i];
@@ -18,22 +35,7 @@ arma::frowvec Sparse3dTensor::getWordBagAt(unsigned int i){
   return wordbag;
 }
 
-// Parse the split matrix data into armadillo matrices
-struct TensorData TensorData::parse(std::string path) {
-  TensorData td;
-  std::ifstream f(path, std::ios::binary);
-  
-  if (!f.is_open()) {
-    std::cout << path << std::endl;
-    throw std::invalid_argument("Could not open file");
-  }
-  
-  f.read(reinterpret_cast<char*>(&td.offset), sizeof(offset));
-  td.R = parseTensor(f);
-  return td;
-}
-
-struct Sparse3dTensor TensorData::parseTensor(std::ifstream& f) {
+struct Sparse3dTensor TensorSlice::parseTensor(std::ifstream& f) {
   Sparse3dTensor R;
   // Read metadata
   f.read(reinterpret_cast<char*>(&(R.n_rows)), sizeof(R.n_rows));
@@ -57,6 +59,6 @@ struct Sparse3dTensor TensorData::parseTensor(std::ifstream& f) {
   f.read(reinterpret_cast<char*>(R.vals.data()), R.n_vals * sizeof(R.vals[0]));
   return R;
 }
-
-
+}// end io
+}// end gaml
 

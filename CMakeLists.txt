@@ -40,6 +40,7 @@ set(gaml_SRCS gaml/io/matrix.cpp gaml/io/matrix_slice.cpp gaml/mf/worker.cpp
   gaml/mf/gd/worker.cpp gaml/mf/gd/r_projection.cpp gaml/mf/gd/nn_projection.cpp
   gaml/mf/als/worker.cpp gaml/mf/als/pseudo_inverse_solver.cpp
   gaml/mf/als/ridge_regression_solver.cpp gaml/mf/als/logger.cpp
+  gaml/io/tensor.cpp gaml/tf/worker.cpp
   gaml/biases/worker.cpp
   gaml/util/table.cpp)
 
@@ -56,3 +57,6 @@ target_link_libraries(bias-mf ${gaml_LIBRARIES})
 
 add_executable(softmax gaml/softmax/src/softmax.cpp ${softmax_srcs})
 target_link_libraries(softmax ${gaml_LIBRARIES})
+
+add_executable(tf gaml/bins/tf.cpp ${gaml_SRCS})
+target_link_libraries(tf ${gaml_LIBRARIES})

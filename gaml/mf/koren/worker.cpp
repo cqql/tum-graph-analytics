@@ -64,7 +64,12 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   const float mu = totalSum / nnz;
 
   // Normalize the local slices
-  const arma::sp_fmat nUSlice = uSlice - mu;
+  //
+  // This is what we would normally do and replace all usages of uSlice with
+  // nUSlice. But armadillo sparse matrices filter out all zero-entries on
+  // creation, so this way we would lose the entries that are perfectly
+  // predicted by the mean.
+  // const arma::sp_fmat nUSlice = uSlice - mu;
 
   // Initialize all the parameters
   arma::fvec bi(nItems, arma::fill::randn);
@@ -85,9 +90,9 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
   for (int i = 0; i < nUsersLocal; ++i) {
     // Number of non-zero entries in this column
-    const int nnz = nUSlice.col_ptrs[i + 1] - nUSlice.col_ptrs[i];
+    const int nnz = uSlice.col_ptrs[i + 1] - uSlice.col_ptrs[i];
 
-    RuLocal[i] = arma::uvec(&nUSlice.row_indices[nUSlice.col_ptrs[i]], nnz);
+    RuLocal[i] = arma::uvec(&uSlice.row_indices[uSlice.col_ptrs[i]], nnz);
     nRuLocal(i) = nnz;
   }
 
@@ -100,21 +105,20 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   arma::uvec nRiLocal(nItems);
 
   // Transpose the U slice so that we can easily compute this
-  const arma::sp_fmat nUSliceT = nUSlice.t();
+  const arma::sp_fmat uSliceT = uSlice.t();
   for (int i = 0; i < nItems; ++i) {
     // Number of non-zero entries in this column
-    const int nnz = nUSliceT.col_ptrs[i + 1] - nUSliceT.col_ptrs[i];
+    const int nnz = uSliceT.col_ptrs[i + 1] - uSliceT.col_ptrs[i];
 
-    RiLocal[i] = arma::uvec(&nUSliceT.row_indices[nUSliceT.col_ptrs[i]], nnz);
+    RiLocal[i] = arma::uvec(&uSliceT.row_indices[uSliceT.col_ptrs[i]], nnz);
     nRiLocal(i) = nnz;
   }
 
   // Cache the locations of entries in the local U slice
-  arma::umat uLocations(2, nUSlice.n_nonzero);
+  arma::umat uLocations(2, uSlice.n_nonzero);
   {
     int index = 0;
-    for (arma::sp_fmat::const_iterator it = nUSlice.begin(),
-                                       end = nUSlice.end();
+    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
          it != end; ++it, ++index) {
       uLocations(0, index) = it.row();
       uLocations(1, index) = it.col();
@@ -133,17 +137,17 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     iteration++;
 
     // Prediction error matrix for the U slice
-    arma::fvec uErrors(nUSlice.n_nonzero);
+    arma::fvec uErrors(uSlice.n_nonzero);
     {
       int index = 0;
-      for (arma::sp_fmat::const_iterator it = nUSlice.begin(),
-                                         end = nUSlice.end();
+      for (arma::sp_fmat::const_iterator it = uSlice.begin(),
+                                         end = uSlice.end();
            it != end; ++it, ++index) {
         const arma::uword i = it.row();
         const arma::uword u = it.col();
 
         uErrors(index) =
-            *it - bi(i) - bu(u + uOffset) -
+            *it - mu - bi(i) - bu(u + uOffset) -
             arma::dot(q.col(i),
                       p.col(u + uOffset) +
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
@@ -216,13 +220,12 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
     // Compute the Squared Error for logging
     float se = 0.0;
-    for (arma::sp_fmat::const_iterator it = nUSlice.begin(),
-                                       end = nUSlice.end();
+    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
          it != end; ++it) {
       const arma::uword i = it.row();
       const arma::uword u = it.col();
       const float error =
-          *it - bi(i) - bu(u + uOffset) -
+          *it - mu - bi(i) - bu(u + uOffset) -
           arma::dot(q.col(i),
                     p.col(u + uOffset) +
                         isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));

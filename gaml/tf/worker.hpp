@@ -43,11 +43,6 @@ class Worker {
 
   // Initialize table as an m*n matrix with random entries
   void randomizetable(petuum::Table<float>& table, int m, int n, int offset);
-  
-  void updatetable(petuum::Table<float>& table, arma::fmat& grad, int offset);
-
-  // Load matrix from a table
-  arma::fmat loadmat(petuum::Table<float>& table, int m, int n);
 
   float eval(arma::fmat& U, arma::fmat& P, arma::fmat& T, const gaml::io::Sparse3dTensor& R);
   void output(int round, float mse_test, float mse_train);

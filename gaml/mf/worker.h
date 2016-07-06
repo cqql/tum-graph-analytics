@@ -29,11 +29,6 @@ class Worker {
   const int uTableId;
   petuum::Table<float> pTable;
   petuum::Table<float> utTable;
-
-  /**
-   * Initialize the m*n submatrix with offset from the left of table randomly
-   */
-  void randomizeTable(petuum::Table<float>& table, int m, int n, int offset);
 };
 }
 }

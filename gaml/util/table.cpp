@@ -20,6 +20,23 @@ arma::fmat loadMatrix(petuum::Table<float>& table, int m, int n) {
   return M;
 }
 
+void randomizeTable(petuum::Table<float>& table, int m, int n,
+                            int offset, Distribution distr) {
+  arma::fvec vec(n);
+  for (int i = 0; i < m; i++) {
+    if(distr == Distribution::NORMAL){
+      vec.randn();
+      vec = arma::abs(vec);
+    } else if(distr == Distribution::UNIFORM) {
+      vec.randu();
+    }
+    petuum::DenseUpdateBatch<float> batch(offset, n);
+    std::memcpy(batch.get_mem(), vec.memptr(), n * sizeof(float));
+
+    table.DenseBatchInc(i, batch);
+  }
+}
+
 void updateMatrixSlice(const arma::fmat& update, petuum::Table<float>& table,
                        int m, int n, int offset) {
   for (int j = 0; j < n; j++) {
@@ -30,6 +47,7 @@ void updateMatrixSlice(const arma::fmat& update, petuum::Table<float>& table,
     table.DenseBatchInc(j, batch);
   }
 }
+
 }
 }
 }

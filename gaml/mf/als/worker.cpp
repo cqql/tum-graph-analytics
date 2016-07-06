@@ -18,8 +18,8 @@ std::tuple<arma::fmat, arma::fmat> Worker::factor(const arma::sp_fmat pSlice,
   auto utTable = this->utTable;
 
   // Randomly initialize the factors
-  this->randomizeTable(pTable, k, pSlice.n_rows, pOffset);
-  this->randomizeTable(utTable, k, uSlice.n_cols, uOffset);
+  gaml::util::table::randomizeTable(pTable, k, pSlice.n_rows, pOffset);
+  gaml::util::table::randomizeTable(utTable, k, uSlice.n_cols, uOffset);
 
   // Share number of non-zero entries in P slice
   this->seTable.Inc(1, this->rank, pSlice.n_nonzero);

@@ -22,7 +22,7 @@
 
 enum RowType { FLOAT };
 
-enum Table { U, P, T, SE};
+enum Table { U, P, T, SE };
 
 namespace po = boost::program_options;
 

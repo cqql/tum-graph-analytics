@@ -7,6 +7,7 @@
 #include "worker.hpp"
 
 #include "../io/tensor.hpp"
+#include "../util/table.h"
 
 namespace gaml {
 namespace tf {
@@ -47,15 +48,15 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
   //petuum::PSTableGroup::GlobalBarrier();
   
   arma::arma_rng::set_seed_random();
-  randomizetable(usertable, rank, Ruser.n_rows, useroffset);
-  randomizetable(prodtable, rank, Rprod.n_cols, prodoffset);
-  randomizetable(wordtable, rank, Rword.n_words, wordoffset);
+  gaml::util::table::randomizeTable(usertable, rank, Ruser.n_rows, useroffset);
+  gaml::util::table::randomizeTable(prodtable, rank, Rprod.n_cols, prodoffset);
+  gaml::util::table::randomizeTable(wordtable, rank, Rword.n_words, wordoffset);
   petuum::PSTableGroup::GlobalBarrier();
   
   // Fetch U, P and T
-  auto U = loadmat(usertable, Rword.n_rows, rank);
-  auto P = loadmat(prodtable, Rword.n_cols, rank);
-  auto T = loadmat(wordtable, Ruser.n_words, rank);
+  auto U = gaml::util::table::loadMatrix(usertable, Rword.n_rows, rank);
+  auto P = gaml::util::table::loadMatrix(prodtable, Rword.n_cols, rank);
+  auto T = gaml::util::table::loadMatrix(wordtable, Ruser.n_words, rank);
 
   feenableexcept(FE_DIVBYZERO);
   for (int round = 0; round < iterations; round++) {
@@ -64,8 +65,8 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
     // Compute gradient for U
     ///////
     arma::fmat Ugrad(Ruser.n_rows, rank, arma::fill::zeros);
-    arma::fmat Ugrad1(Ruser.n_rows, rank, arma::fill::zeros);
-    arma::fmat Ugrad2(Ruser.n_rows, rank, arma::fill::zeros);
+    arma::fmat Unum(Ruser.n_rows, rank, arma::fill::zeros);
+    arma::fmat Udenom(Ruser.n_rows, rank, arma::fill::zeros);
     
     // iterate over all up pairs in Ruser
     for (std::size_t i = 0; i != Ruser.n_nz; ++i) {
@@ -73,26 +74,26 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
       int prodind = Ruser.cols[i];
       auto wordbag = Ruser.getWordBagAt(i);
       
-      Ugrad1.row(userind - useroffset) += P.row(prodind) % (wordbag * T);
-      Ugrad2.row(userind - useroffset) += P.row(prodind) % ((U.row(userind) % P.row(prodind) * T.t()) * T);  
+      Unum.row(userind - useroffset) += P.row(prodind) % (wordbag * T);
+      Udenom.row(userind - useroffset) += P.row(prodind) % ((U.row(userind) % P.row(prodind) * T.t()) * T);  
     }
     
     arma::fmat Ulocal = U.rows(useroffset, useroffset + Ruser.n_rows - 1);
     // prevent div by zero
-    Ugrad2 += 10E-16f;
-    Ugrad = (Ulocal % Ugrad1 / Ugrad2) - Ulocal;
+    Udenom += 10E-16f;
+    Ugrad = (Ulocal % Unum / Udenom) - Ulocal;
     if(reg && round > reg_thr) {
-      Ugrad = Ugrad - lambda * Ulocal % Ulocal / Ugrad2;
+      Ugrad = Ugrad - lambda * Ulocal % Ulocal / Udenom;
     }
     
 
     // Update U table
-    updatetable(usertable, Ugrad, useroffset);
+    gaml::util::table::updateMatrixSlice(Ugrad, usertable, Ugrad.n_rows, Ugrad.n_cols, useroffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch updated U
-    U = loadmat(usertable, U.n_rows, U.n_cols);
+    U = gaml::util::table::loadMatrix(usertable, U.n_rows, U.n_cols);
     if(clamp){
       U = arma::clamp(U, 0.0, std::numeric_limits<float>::max());
     }
@@ -100,34 +101,34 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
     ///////
     // Compute gradient for P
     ///////
-
     arma::fmat Pgrad(Rprod.n_cols, rank, arma::fill::zeros);
-    arma::fmat Pgrad1(Rprod.n_cols, rank, arma::fill::zeros);
-    arma::fmat Pgrad2(Rprod.n_cols, rank, arma::fill::zeros);
+    arma::fmat Pnum(Rprod.n_cols, rank, arma::fill::zeros);
+    arma::fmat Pdenom(Rprod.n_cols, rank, arma::fill::zeros);
+    
     // iterate over all up pairs in Rprod
     for (std::size_t i = 0; i != Rprod.n_nz; ++i) {
       int userind = Rprod.rows[i];
       int prodind = Rprod.cols[i];
       auto wordbag = Rprod.getWordBagAt(i);
       
-      Pgrad1.row(prodind - prodoffset) += U.row(userind) % (wordbag * T);
-      Pgrad2.row(prodind - prodoffset) += U.row(userind) % ((U.row(userind) % P.row(prodind) * T.t()) * T);
+      Pnum.row(prodind - prodoffset) += U.row(userind) % (wordbag * T);
+      Pdenom.row(prodind - prodoffset) += U.row(userind) % ((U.row(userind) % P.row(prodind) * T.t()) * T);
     }
     
     arma::fmat Plocal = P.rows(prodoffset, prodoffset + Rprod.n_cols   - 1);
-    Pgrad2 += 10E-16f;
-    Pgrad = (Plocal % Pgrad1 / Pgrad2) - Plocal;
+    Pdenom += 10E-16f;
+    Pgrad = (Plocal % Pnum / Pdenom) - Plocal;
     if(reg && round > reg_thr) {
-      Pgrad = Pgrad - lambda * Plocal % Plocal / Pgrad2;
+      Pgrad = Pgrad - lambda * Plocal % Plocal / Pdenom;
     }
 
     // Update P table
-    updatetable(prodtable, Pgrad, prodoffset);
+    gaml::util::table::updateMatrixSlice(Pgrad, prodtable, Pgrad.n_rows, Pgrad.n_cols, prodoffset);
 
     petuum::PSTableGroup::GlobalBarrier();
   
     // Fetch updated P
-    P = this->loadmat(prodtable, P.n_rows, P.n_cols);
+    P = gaml::util::table::loadMatrix(prodtable, P.n_rows, P.n_cols);
     if(clamp) {
       P = arma::clamp(P, 0.0, std::numeric_limits<float>::max());
     }
@@ -136,9 +137,10 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
     // Compute gradient for T
     ///////
     arma::fmat Tgrad(Rword.n_words, rank, arma::fill::zeros);
-    arma::fmat Tgrad1(Rword.n_words, rank, arma::fill::zeros);
-    arma::fmat Tgrad2(Rword.n_words, rank, arma::fill::zeros);
+    arma::fmat Tnum(Rword.n_words, rank, arma::fill::zeros);
+    arma::fmat Tdenom(Rword.n_words, rank, arma::fill::zeros);
     arma::fmat Tlocal = T.rows(wordoffset, Rword.n_words + wordoffset - 1);
+    
     // iterate over all uv pairs in Rword
     for (std::size_t i = 0; i != Rword.n_nz; ++i) {
       int userind = Rword.rows[i];
@@ -148,22 +150,22 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
       arma::frowvec user_times_prod = (U.row(userind) % P.row(prodind));
       arma::frowvec pred = user_times_prod * Tlocal.t();
 
-      Tgrad1 += wordbag.t() * user_times_prod;
-      Tgrad2 += pred.t() * user_times_prod;
+      Tnum += wordbag.t() * user_times_prod;
+      Tdenom += pred.t() * user_times_prod;
     }
-    Tgrad2 += 10E-16f;
-    Tgrad = (Tlocal % Tgrad1 / Tgrad2) - Tlocal;
+    Tdenom += 10E-16f;
+    Tgrad = (Tlocal % Tnum / Tdenom) - Tlocal;
     if(reg && round > reg_thr) {
-      Tgrad = Tgrad - lambda * Tlocal % Tlocal / Tgrad2;
+      Tgrad = Tgrad - lambda * Tlocal % Tlocal / Tdenom;
     }
 
     // Update T table
-    updatetable(wordtable, Tgrad, wordoffset);
+    gaml::util::table::updateMatrixSlice(Tgrad, wordtable, Tgrad.n_rows, Tgrad.n_cols, wordoffset);
 
     petuum::PSTableGroup::GlobalBarrier();
 
     // Fetch updated T
-    T = loadmat(wordtable, T.n_rows, T.n_cols);
+    T = gaml::util::table::loadMatrix(wordtable, T.n_rows, T.n_cols);
     if(clamp) {
       T = arma::clamp(T, 0.0, std::numeric_limits<float>::max());
     }
@@ -187,48 +189,6 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
 
   return std::make_tuple(U, P, T);
 }
-
-
-void Worker::randomizetable(petuum::Table<float>& table, int m, int n,
-                            int offset) {
-  arma::fvec vec(n);
-
-  for (int i = 0; i < m; i++) {
-    vec.randn();
-    vec = arma::abs(vec);
-
-    petuum::DenseUpdateBatch<float> batch(offset, n);
-    std::memcpy(batch.get_mem(), vec.memptr(), n * sizeof(float));
-
-    table.DenseBatchInc(i, batch);
-  }
-}
-
-void Worker::updatetable(petuum::Table<float>& table, arma::fmat& grad, int offset) {
-    for (int j = 0; j < grad.n_cols; j++) {
-      petuum::DenseUpdateBatch<float> batch(offset, grad.n_rows);
-
-      std::memcpy(batch.get_mem(), grad.colptr(j),
-                  grad.n_rows * sizeof(float));
-
-      table.DenseBatchInc(j, batch);
-    }
-}
-
-
-arma::fmat Worker::loadmat(petuum::Table<float>& table, int m, int n) {
-  arma::fmat M(m, n);
-  petuum::RowAccessor rowacc;
-
-  for (int i = 0; i < n; i++) {
-    std::vector<float> tmp;
-    const auto& col = table.Get<petuum::DenseRow<float>>(i, &rowacc);
-    col.CopyToVector(&tmp);
-    std::memcpy(M.colptr(i), tmp.data(), sizeof(float) * m);
-  }
-  return M;
-}
-
 
 void Worker::output(int round, float mse_test, float mse_train) {
   std::cout << "Round: " << round << " MSE Test: " << mse_test << " MSE Train: " << mse_train << std::endl;
@@ -267,7 +227,6 @@ void Worker::initTables(int uTableId, int pTableId, int tTableId, int seTableId,
   u_config.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(uTableId, u_config);
 
-
   petuum::ClientTableConfig p_config;
   p_config.table_info.row_type = rowType;
   p_config.table_info.row_capacity = pNumRows;
@@ -281,7 +240,6 @@ void Worker::initTables(int uTableId, int pTableId, int tTableId, int seTableId,
   p_config.thread_cache_capacity = 1;
   p_config.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(pTableId, p_config);
-
 
   petuum::ClientTableConfig t_config;
   t_config.table_info.row_type = rowType;

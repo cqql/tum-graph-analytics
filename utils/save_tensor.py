@@ -121,6 +121,11 @@ def main():
     json.dump([{'users': len(users), 'products': len(prods), 'words' : len(voc), 'train' : len(df_train), 'test' : len(df_test)}, 
             {'vocab' : [eng.vocab.strings[w] for w in voc]}], 
             open(os.path.join(args.out, "meta.txt"), "w"))
+    run_config = "\n".join(["clients=1", "id=0", "workers="+str(args.k), "iterations=30", "users="+str(len(users)), "products="+str(len(prods)), "words="+str(len(voc)), 
+                        "eval-rounds=1", "seed=0", "atol=0.01", "rtol=0.01", "lambda=0.5", "clamp=true", "reg=false", "reg-thr=1"])
+
+    with open(os.path.join(args.out, "run_config.cfg"), "w") as f:
+        f.write(run_config)
 
 if __name__ == "__main__":
     main()

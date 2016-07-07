@@ -43,7 +43,7 @@ petuum_params = {
     , "num_comm_channels_per_client": 1 # 1~2 are usually enough.
     }
 
-prog_name = "softmax_main"
+prog_name = "softmax"
 prog_path = join(app_dir, "bin", prog_name)
 
 env_params = (

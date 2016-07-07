@@ -57,6 +57,9 @@ target_link_libraries(bias-mf ${gaml_LIBRARIES})
 
 add_executable(softmax gaml/softmax/src/softmax.cpp ${softmax_srcs})
 target_link_libraries(softmax ${gaml_LIBRARIES})
+add_custom_command(TARGET softmax 
+                   POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:softmax> gaml/softmax/bin)
 
 add_executable(tf gaml/bins/tf.cpp ${gaml_SRCS})
 target_link_libraries(tf ${gaml_LIBRARIES})

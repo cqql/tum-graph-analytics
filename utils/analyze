@@ -1,12 +1,29 @@
 #!/usr/bin/env python
 
 import argparse
+import concurrent.futures
 import math
+import multiprocessing
 import os
 
 import numpy as np
 
 import matrix
+
+def split(lst, nchunks):
+    # Average number of items per chunk
+    n = int(math.floor(len(lst) / nchunks))
+
+    chunks = []
+
+    for i in range(nchunks - 1):
+        chunks.append(lst[i * n:(i + 1) * n])
+
+    # Finally all remaining ones (There may be some left over if the number of
+    # chunks does not evenly divide the number of items)
+    chunks.append(lst[(nchunks - 1) * n:])
+
+    return chunks
 
 
 def main():
@@ -87,9 +104,6 @@ def main():
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)
 
-    mse = 0
-    correct = 0
-
     # Number of ratings per user
     Ru = R.getnnz(axis=0)
 
@@ -99,23 +113,41 @@ def main():
     # Transform 1xN matrix into a vector
     Tu = np.asarray(Tu).squeeze()
 
-    for k in range(R.nnz):
-        i, u = R.row[k], R.col[k]
-        t = T.data[k]
-        expected = R.data[k]
+    def process(chunk):
+        mse = 0
+        correct = 0
 
-        Ys = np.sum(Y[:, R.row[R.col == u]], axis=1)
-        biases = mu + bi[i] + bu[u]
-        timedev = t - Tu[u]
-        tempdyn = alpha[u] * math.copysign(1.0, timedev) * (abs(timedev)**beta)
-        interactions = Q[:, i].dot(P[:, u] + (1 / math.sqrt(abs(Ru[u]))) * Ys)
-        actual = biases + tempdyn + interactions
+        for k in chunk:
+            i, u = R.row[k], R.col[k]
+            t = T.data[k]
+            expected = R.data[k]
 
-        error = abs(expected - actual)
-        mse += error * error
+            Ys = np.sum(Y[:, R.row[R.col == u]], axis=1)
+            biases = mu + bi[i] + bu[u]
+            timedev = t - Tu[u]
+            tempdyn = alpha[u] * math.copysign(1.0, timedev) * (abs(timedev)
+                                                                **beta)
+            interactions = Q[:, i].dot(P[:, u] + (1 / math.sqrt(abs(Ru[u]))) *
+                                       Ys)
+            actual = biases + tempdyn + interactions
 
-        if error <= tolerance:
-            correct += 1
+            error = abs(expected - actual)
+            mse += error * error
+
+            if error <= tolerance:
+                correct += 1
+
+        return (mse, correct)
+
+    ncpus = multiprocessing.cpu_count()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=ncpus)
+
+    chunks = split(range(R.nnz), ncpus)
+    futures = [executor.submit(process, c) for c in chunks]
+    results = [f.result() for f in futures]
+
+    mse = sum([r[0] for r in results])
+    correct = sum([r[1] for r in results])
 
     print("MSE = {}".format(mse / R.nnz))
     print("Correct {}; Incorrect {}; Recall/Accuracy {:.3f}".format(

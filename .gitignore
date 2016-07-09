@@ -26,6 +26,7 @@ libs/bosen
 # Build artifacts
 mf-als
 bias-mf
+koren
 
 # Python artifacts
 __pycache__

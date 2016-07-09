@@ -1,11 +1,35 @@
 #!/usr/bin/env python
 
 import argparse
+import concurrent.futures
+import math
+import multiprocessing
 import os
 
 import numpy as np
 
 import matrix
+
+
+def sgn(num):
+    """Sign operation."""
+    return math.copysign(1.0, num)
+
+
+def split(lst, nchunks):
+    # Average number of items per chunk
+    n = int(math.floor(len(lst) / nchunks))
+
+    chunks = []
+
+    for i in range(nchunks - 1):
+        chunks.append(lst[i * n:(i + 1) * n])
+
+    # Finally all remaining ones (There may be some left over if the number of
+    # chunks does not evenly divide the number of items)
+    chunks.append(lst[(nchunks - 1) * n:])
+
+    return chunks
 
 
 def main():
@@ -15,71 +39,134 @@ def main():
                         type=float,
                         default=0.5,
                         help="Tolerance for correct prediction")
-    parser.add_argument("-R", help="Path to rating matrix")
-    parser.add_argument("-P", help="Path to P factorization")
-    parser.add_argument("-U", help="Path to U^T factorization")
-    parser.add_argument("--pbias", help="Path to P bias")
-    parser.add_argument("--ubias", help="Path to U bias")
-    parser.add_argument("--mean", help="Path to mean")
     parser.add_argument(
         "-d",
-        "--dir",
-        help="Directory with factorizations as created by mf-als/bias-mf")
+        "--data",
+        help="Directory with preprocessed data and factorizations")
+    parser.add_argument("-m",
+                        "--mode",
+                        choices=["train", "test"],
+                        default="test")
+    parser.add_argument("--beta",
+                        default=0.4,
+                        type=float,
+                        help="beta for time deviations")
 
     args = parser.parse_args()
     tolerance = args.tolerance
+    data = args.data
+    mode = args.mode
+    beta = args.beta
 
-    if args.dir:
-        if args.R is None:
-            args.R = os.path.join(args.dir, "test")
+    Rpath = os.path.join(data, mode)
+    Tpath = os.path.join(data, mode + "-time")
+    Qpath = os.path.join(data, "Q")
+    Ppath = os.path.join(data, "P")
+    Ypath = os.path.join(data, "Y")
+    mupath = os.path.join(data, "mu")
+    bipath = os.path.join(data, "bi")
+    bupath = os.path.join(data, "bu")
+    alphapath = os.path.join(data, "alpha")
+    kappapath = os.path.join(data, "kappa")
 
-        args.P = os.path.join(args.dir, "P")
-        args.U = os.path.join(args.dir, "U")
+    # Ratings matrix
+    R = matrix.loadfile(Rpath)
 
-        if os.path.isfile(os.path.join(args.dir, "mean")):
-            args.mean = os.path.join(args.dir, "mean")
+    # Rating times matrix
+    T = matrix.loadfile(Tpath)
 
-        if os.path.isfile(os.path.join(args.dir, "Pbias")):
-            args.pbias = os.path.join(args.dir, "Pbias")
+    # Item factors
+    Q = np.loadtxt(Qpath, delimiter=",", ndmin=2)
 
-        if os.path.isfile(os.path.join(args.dir, "Ubias")):
-            args.ubias = os.path.join(args.dir, "Ubias")
+    # User factors
+    P = np.loadtxt(Ppath, delimiter=",", ndmin=2)
 
-    R = matrix.loadfile(args.R)
-    P = np.loadtxt(args.P, delimiter=",", ndmin=2)
-    U = np.loadtxt(args.U, delimiter=",", ndmin=2).T
+    # Implicit feedback factors
+    Y = np.loadtxt(Ypath, delimiter=",", ndmin=2)
 
-    if args.mean:
-        mean = np.loadtxt(args.mean, delimiter=",", ndmin=1)[0]
+    # Overall mean
+    if os.path.isfile(mupath):
+        mu = np.loadtxt(mupath, delimiter=",", ndmin=1)[0]
     else:
-        mean = 0.0
+        mu = 0.0
 
-    if args.pbias:
-        Pbias = np.loadtxt(args.pbias, delimiter=",")
+    # Item biases
+    if os.path.isfile(bipath):
+        bi = np.loadtxt(bipath, delimiter=",")
     else:
-        Pbias = np.zeros((P.shape[0],))
+        bi = np.zeros((Q.shape[1], ))
 
-    if args.ubias:
-        Ubias = np.loadtxt(args.ubias, delimiter=",")
+    # Item bias trend slopes
+    if os.path.isfile(kappapath):
+        kappa = np.loadtxt(kappapath, delimiter=",")
     else:
-        Ubias = np.zeros((U.shape[1],))
+        kappa = np.zeros((Q.shape[1]))
+
+    # User biases
+    if os.path.isfile(bupath):
+        bu = np.loadtxt(bupath, delimiter=",")
+    else:
+        bu = np.zeros((P.shape[1], ))
+
+    # User bias trend slopes
+    if os.path.isfile(alphapath):
+        alpha = np.loadtxt(alphapath, delimiter=",")
+    else:
+        alpha = np.zeros((P.shape[1]))
 
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)
 
-    mse = 0
-    correct = 0
+    # Number of ratings per user
+    Ru = R.getnnz(axis=0)
 
-    for k in range(R.nnz):
-        i, j = R.row[k], R.col[k]
-        expected = R.data[k]
-        actual = mean + Pbias[i] + Ubias[j] + P[i, :].dot(U[:, j])
-        error = abs(expected - actual)
+    # Mean rating date per user
+    Tu = np.true_divide(T.sum(axis=0), T.getnnz(axis=0))
 
-        mse += error * error
+    # Mean rating date per item
+    Ti = np.true_divide(T.sum(axis=1).T, T.getnnz(axis=1).T)
 
-        if error <= tolerance:
-            correct += 1
+    # Transform 1xN matrices into vectors
+    Tu = np.asarray(Tu).squeeze()
+    Ti = np.asarray(Ti).squeeze()
+
+    def process(chunk):
+        mse = 0
+        correct = 0
+
+        for k in chunk:
+            i, u = R.row[k], R.col[k]
+            t = T.data[k]
+            expected = R.data[k]
+
+            Ys = np.sum(Y[:, R.row[R.col == u]], axis=1)
+            biases = mu + bi[i] + bu[u]
+            utimedev = t - Tu[u]
+            itimedev = t - Ti[i]
+            tempdyn = alpha[u] * sgn(utimedev) * (
+                abs(utimedev)**beta) + kappa[i] * sgn(itimedev) * (
+                    abs(itimedev)**beta)
+            interactions = Q[:, i].dot(P[:, u] + (1 / math.sqrt(abs(Ru[u]))) *
+                                       Ys)
+            actual = biases + tempdyn + interactions
+
+            error = abs(expected - actual)
+            mse += error * error
+
+            if error <= tolerance:
+                correct += 1
+
+        return (mse, correct)
+
+    ncpus = multiprocessing.cpu_count()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=ncpus)
+
+    chunks = split(range(R.nnz), ncpus)
+    futures = [executor.submit(process, c) for c in chunks]
+    results = [f.result() for f in futures]
+
+    mse = sum([r[0] for r in results])
+    correct = sum([r[1] for r in results])
 
     print("MSE = {}".format(mse / R.nnz))
     print("Correct {}; Incorrect {}; Recall/Accuracy {:.3f}".format(

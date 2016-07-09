@@ -86,11 +86,11 @@ struct BiasMfThread {
     auto UT = std::get<1>(factors);
 
     if (this->rank == 0) {
-      arma::fvec({mean}).save(this->path + "/mean", arma::csv_ascii);
-      umeans.save(this->path + "/Ubias", arma::csv_ascii);
-      pmeans.save(this->path + "/Pbias", arma::csv_ascii);
-      P.save(this->path + "/P", arma::csv_ascii);
-      UT.save(this->path + "/U", arma::csv_ascii);
+      arma::fvec({mean}).save(this->path + "/mu", arma::csv_ascii);
+      umeans.save(this->path + "/bu", arma::csv_ascii);
+      pmeans.save(this->path + "/bi", arma::csv_ascii);
+      P.t().eval().save(this->path + "/Q", arma::csv_ascii);
+      UT.t().eval().save(this->path + "/P", arma::csv_ascii);
     }
 
     petuum::PSTableGroup::DeregisterThread();

@@ -24,21 +24,32 @@ def main():
                         "--mode",
                         choices=["train", "test"],
                         default="test")
+    parser.add_argument("--beta",
+                        default=0.4,
+                        type=float,
+                        help="beta for time deviations")
 
     args = parser.parse_args()
     tolerance = args.tolerance
     data = args.data
     mode = args.mode
+    beta = args.beta
+
     Rpath = os.path.join(data, mode)
+    Tpath = os.path.join(data, mode + "-time")
     Qpath = os.path.join(data, "Q")
     Ppath = os.path.join(data, "P")
     Ypath = os.path.join(data, "Y")
     mupath = os.path.join(data, "mu")
     bipath = os.path.join(data, "bi")
     bupath = os.path.join(data, "bu")
+    alphapath = os.path.join(data, "alpha")
 
     # Ratings matrix
     R = matrix.loadfile(Rpath)
+
+    # Rating times matrix
+    T = matrix.loadfile(Tpath)
 
     # Item factors
     Q = np.loadtxt(Qpath, delimiter=",", ndmin=2)
@@ -67,22 +78,38 @@ def main():
     else:
         bu = np.zeros((P.shape[1], ))
 
+    # User trend slopse
+    if os.path.isfile(alphapath):
+        alpha = np.loadtxt(alphapath, delimiter=",")
+    else:
+        alpha = np.zeros((P.shape[1]))
+
     colnnz = R.getnnz(axis=0)
     rownnz = R.getnnz(axis=1)
 
     mse = 0
     correct = 0
 
+    # Number of ratings per user
     Ru = R.getnnz(axis=0)
+
+    # Mean rating date per user
+    Tu = T.sum(axis=0) / T.getnnz(axis=0)
+
+    # Transform 1xN matrix into a vector
+    Tu = np.asarray(Tu).squeeze()
 
     for k in range(R.nnz):
         i, u = R.row[k], R.col[k]
+        t = T.data[k]
         expected = R.data[k]
 
         Ys = np.sum(Y[:, R.row[R.col == u]], axis=1)
         biases = mu + bi[i] + bu[u]
+        timedev = t - Tu[u]
+        tempdyn = alpha[u] * math.copysign(1.0, timedev) * (abs(timedev)**beta)
         interactions = Q[:, i].dot(P[:, u] + (1 / math.sqrt(abs(Ru[u]))) * Ys)
-        actual = biases + interactions
+        actual = biases + tempdyn + interactions
 
         error = abs(expected - actual)
         mse += error * error

@@ -165,24 +165,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   }
   arma::sp_fmat dev(uLocations, deviations);
 
-  // Parameters for each day and user to capture sudden drifts (spikes)
-  std::vector<int> dayCount(nUsersLocal);
-  std::vector<std::map<int, int>> dayToIndex(nUsersLocal);
-  for (arma::sp_fmat::const_iterator it = tSlice.begin(), end = tSlice.end();
-       it != end; ++it) {
-    const int i = it.row();
-    const int u = it.col();
-    const int t = (int)*it;
-    auto& map = dayToIndex[u];
-
-    if (map.find(t) == map.end()) {
-      map[t] = dayCount[u];
-      dayCount[u] += 1;
-    }
-  }
-  int maxDays = *std::max_element(dayCount.begin(), dayCount.end());
-  arma::fmat b_ut(nUsersLocal, maxDays, arma::fill::zeros);
-
   // Values from previous iteration to compute the diff against for updates
   float prevSE = 0.0;
   float prevMSE = 0.0;
@@ -207,7 +189,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
 
         uErrors(index) =
             *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
-            b_ut(u, dayToIndex[u][(int)tSlice(i, u)]) -
             arma::dot(q.col(i),
                       p.col(uGlobal) +
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
@@ -224,15 +205,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
         2 *
         (lambdab * nRuLocal % alpha.rows(uOffset, uOffset + nUsersLocal - 1) -
          arma::sum(dev % uE, 0).t());
-    arma::fmat b_utGrad(nUsersLocal, maxDays);
-    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
-         it != end; ++it) {
-      const int i = it.row();
-      const int u = it.col();
-      const int tInd = dayToIndex[u][(int)tSlice(i, u)];
-
-      b_utGrad(u, tInd) += 2 * (lambdab * b_utGrad(u, tInd) - *it);
-    }
 
     arma::fmat qGrad(k, nItems);
     arma::fmat pGrad(k, nUsersLocal);
@@ -272,7 +244,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     const arma::fvec biStep = -gammab * biGrad;
     const arma::fvec buStep = -gammab * buGrad;
     const arma::fvec alphaStep = -(gammat / 10000) * alphaGrad;
-    const arma::fmat b_utStep = -gammat * b_utGrad;
     const arma::fmat qStep = -gammaqpy * qGrad;
     const arma::fmat pStep = -gammaqpy * pGrad;
     const arma::fmat yStep = -gammaqpy * yGrad;
@@ -296,7 +267,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     y = gaml::util::table::loadMatrix(yTable, nItems, k).t();
 
     // This one is applied directly because it is used purely locally
-    b_ut += b_utStep;
 
     // Compute the Squared Error for logging
     float se = 0.0;
@@ -307,7 +277,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
       const arma::uword uGlobal = u + uOffset;
       const float error =
           *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
-          b_ut(u, dayToIndex[u][(int)tSlice(i, u)]) -
           arma::dot(q.col(i),
                     p.col(uGlobal) +
                         isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));

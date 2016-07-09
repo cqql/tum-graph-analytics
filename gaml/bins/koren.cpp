@@ -18,7 +18,7 @@
 
 enum RowType { FLOAT, INT };
 
-enum Table { MU, BI, BU, ALPHA, Q, P, Y, SE };
+enum Table { TI, MU, BI, BU, ALPHA, KAPPA, Q, P, Y, SE };
 
 namespace po = boost::program_options;
 
@@ -84,22 +84,24 @@ struct KorenThread {
     gaml::mf::koren::Worker worker(
         this->rank, this->nranks, this->lambdab, this->lambdaqpy, this->gammab,
         this->gammat, this->gammaqpy, this->beta, this->atol, this->rtol,
-        Table::MU, Table::BI, Table::BU, Table::ALPHA, Table::Q, Table::P,
-        Table::Y, Table::SE);
+        Table::TI, Table::MU, Table::BI, Table::BU, Table::ALPHA, Table::KAPPA,
+        Table::Q, Table::P, Table::Y, Table::SE);
     auto factors = worker.factor(iSlice, iOffset, uSlice, tSlice, uOffset, k);
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
     auto bu = std::get<2>(factors);
     auto alpha = std::get<3>(factors);
-    auto Q = std::get<4>(factors);
-    auto P = std::get<5>(factors);
-    auto Y = std::get<6>(factors);
+    auto kappa = std::get<4>(factors);
+    auto Q = std::get<5>(factors);
+    auto P = std::get<6>(factors);
+    auto Y = std::get<7>(factors);
 
     if (this->rank == 0) {
       arma::fvec({mu}).save(this->path + "/mu", arma::csv_ascii);
       bi.save(this->path + "/bi", arma::csv_ascii);
       bu.save(this->path + "/bu", arma::csv_ascii);
       alpha.save(this->path + "/alpha", arma::csv_ascii);
+      kappa.save(this->path + "/kappa", arma::csv_ascii);
       Q.save(this->path + "/Q", arma::csv_ascii);
       P.save(this->path + "/P", arma::csv_ascii);
       Y.save(this->path + "/Y", arma::csv_ascii);
@@ -182,7 +184,7 @@ int main(int argc, char** argv) {
   table_group_config.host_map.insert(
       std::make_pair(0, petuum::HostInfo(0, "127.0.0.1", "10000")));
   table_group_config.consistency_model = petuum::SSP;
-  table_group_config.num_tables = 8;
+  table_group_config.num_tables = 10;
   table_group_config.num_total_clients = num_clients;
   table_group_config.num_local_app_threads = num_workers + 1;
   // Somehow a larger number than 1 leads to hanging at the end while the main
@@ -193,10 +195,10 @@ int main(int argc, char** argv) {
   petuum::PSTableGroup::Init(table_group_config, false);
 
   // Create tables
-  gaml::mf::koren::Worker::initTables(Table::MU, Table::BI, Table::BU,
-                                      Table::ALPHA, Table::Q, Table::P,
-                                      Table::Y, Table::SE, RowType::FLOAT,
-                                      RowType::INT, k, nItems, nUsers, nranks);
+  gaml::mf::koren::Worker::initTables(
+      Table::TI, Table::MU, Table::BI, Table::BU, Table::ALPHA, Table::KAPPA,
+      Table::Q, Table::P, Table::Y, Table::SE, RowType::FLOAT, RowType::INT, k,
+      nItems, nUsers, nranks);
 
   petuum::PSTableGroup::CreateTableDone();
 

@@ -10,6 +10,12 @@ import numpy as np
 
 import matrix
 
+
+def sgn(num):
+    """Sign operation."""
+    return math.copysign(1.0, num)
+
+
 def split(lst, nchunks):
     # Average number of items per chunk
     n = int(math.floor(len(lst) / nchunks))
@@ -61,6 +67,7 @@ def main():
     bipath = os.path.join(data, "bi")
     bupath = os.path.join(data, "bu")
     alphapath = os.path.join(data, "alpha")
+    kappapath = os.path.join(data, "kappa")
 
     # Ratings matrix
     R = matrix.loadfile(Rpath)
@@ -87,7 +94,13 @@ def main():
     if os.path.isfile(bipath):
         bi = np.loadtxt(bipath, delimiter=",")
     else:
-        bi = np.zeros((Q.shape[0], ))
+        bi = np.zeros((Q.shape[1], ))
+
+    # Item bias trend slopes
+    if os.path.isfile(kappapath):
+        kappa = np.loadtxt(kappapath, delimiter=",")
+    else:
+        kappa = np.zeros((Q.shape[1]))
 
     # User biases
     if os.path.isfile(bupath):
@@ -95,7 +108,7 @@ def main():
     else:
         bu = np.zeros((P.shape[1], ))
 
-    # User trend slopse
+    # User bias trend slopes
     if os.path.isfile(alphapath):
         alpha = np.loadtxt(alphapath, delimiter=",")
     else:
@@ -108,10 +121,14 @@ def main():
     Ru = R.getnnz(axis=0)
 
     # Mean rating date per user
-    Tu = T.sum(axis=0) / T.getnnz(axis=0)
+    Tu = np.true_divide(T.sum(axis=0), T.getnnz(axis=0))
 
-    # Transform 1xN matrix into a vector
+    # Mean rating date per item
+    Ti = np.true_divide(T.sum(axis=1).T, T.getnnz(axis=1).T)
+
+    # Transform 1xN matrices into vectors
     Tu = np.asarray(Tu).squeeze()
+    Ti = np.asarray(Ti).squeeze()
 
     def process(chunk):
         mse = 0
@@ -124,9 +141,11 @@ def main():
 
             Ys = np.sum(Y[:, R.row[R.col == u]], axis=1)
             biases = mu + bi[i] + bu[u]
-            timedev = t - Tu[u]
-            tempdyn = alpha[u] * math.copysign(1.0, timedev) * (abs(timedev)
-                                                                **beta)
+            utimedev = t - Tu[u]
+            itimedev = t - Ti[i]
+            tempdyn = alpha[u] * sgn(utimedev) * (
+                abs(utimedev)**beta) + kappa[i] * sgn(itimedev) * (
+                    abs(itimedev)**beta)
             interactions = Q[:, i].dot(P[:, u] + (1 / math.sqrt(abs(Ru[u]))) *
                                        Ys)
             actual = biases + tempdyn + interactions

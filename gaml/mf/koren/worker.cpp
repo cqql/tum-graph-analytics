@@ -30,8 +30,8 @@ arma::sp_fmat operator-(const arma::sp_fmat& A, const float& b) {
   return arma::sp_fmat(rowinds, colptrs, vals, A.n_rows, A.n_cols);
 }
 
-std::tuple<float, arma::fvec, arma::fvec, arma::fvec, arma::fmat, arma::fmat,
-           arma::fmat>
+std::tuple<float, arma::fvec, arma::fvec, arma::fvec, arma::fvec, arma::fmat,
+           arma::fmat, arma::fmat>
 Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                const arma::sp_fmat uSlice, const arma::sp_fmat tSlice,
                const int uOffset, const int k) {
@@ -45,10 +45,12 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   const auto beta = this->beta;
   const auto atol = this->atol;
   const auto rtol = this->rtol;
+  auto tiTable = this->tiTable;
   auto muTable = this->muTable;
   auto biTable = this->biTable;
   auto buTable = this->buTable;
   auto alphaTable = this->alphaTable;
+  auto kappaTable = this->kappaTable;
   auto qTable = this->qTable;
   auto yTable = this->yTable;
   auto pTable = this->pTable;
@@ -90,6 +92,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   arma::fvec bi(nItems, arma::fill::randn);
   arma::fvec bu(nUsers, arma::fill::randn);
   arma::fvec alpha(nUsers, arma::fill::zeros);
+  arma::fvec kappa(nItems, arma::fill::zeros);
   arma::fmat q(k, nItems, arma::fill::randn);
   arma::fmat p(k, nUsers, arma::fill::randn);
   arma::fmat y(k, nItems, arma::fill::randn);
@@ -106,6 +109,33 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     const int nnz = tSlice.col_ptrs[i + 1] - tSlice.col_ptrs[i];
 
     tU[i] = arma::mean(arma::fvec(&tSlice.values[tSlice.col_ptrs[i]], nnz));
+  }
+
+  // Mean time of rating per item
+  arma::fmat tiStats;
+  {
+    // Number of ratings and the sum of their dates per item in this u slice
+    arma::fvec nI(nItems);
+    arma::fvec tI(nItems);
+
+    for (arma::sp_fmat::const_iterator it = tSlice.begin(), end = tSlice.end();
+         it != end; ++it) {
+      const int i = it.row();
+
+      nI(i) += 1;
+      tI(i) += *it;
+    }
+
+    this->stepTable(tiTable, tI, 0, 0);
+    this->stepTable(tiTable, nI, 1, 0);
+
+    petuum::PSTableGroup::GlobalBarrier();
+
+    tiStats = gaml::util::table::loadMatrix(tiTable, nItems, 2);
+  }
+  const arma::fvec tI = tiStats.col(0) / tiStats.col(1);
+  if (rank == 0) {
+    tI.save("tI", arma::csv_ascii);
   }
 
   // Indices of all items rated by u for each user u in the local U slice
@@ -151,19 +181,23 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   }
 
   // Time deviations of each rating
-  arma::fvec deviations(uSlice.n_nonzero);
+  arma::fvec uDevValues(uSlice.n_nonzero);
+  arma::fvec iDevValues(uSlice.n_nonzero);
   {
     int index = 0;
-    for (arma::sp_fmat::const_iterator it = uSlice.begin(), end = uSlice.end();
+    for (arma::sp_fmat::const_iterator it = tSlice.begin(), end = tSlice.end();
          it != end; ++it, ++index) {
       const int i = it.row();
       const int u = it.col();
-      const float tDev = tSlice(i, u) - tU(u);
+      const float tuDev = *it - tU(u);
+      const float tiDev = *it - tI(i);
 
-      deviations(index) = sgn(tDev) * std::pow(std::abs(tDev), beta);
+      uDevValues(index) = sgn(tuDev) * std::pow(std::abs(tuDev), beta);
+      iDevValues(index) = sgn(tiDev) * std::pow(std::abs(tiDev), beta);
     }
   }
-  arma::sp_fmat dev(uLocations, deviations);
+  arma::sp_fmat uDev(uLocations, uDevValues);
+  arma::sp_fmat iDev(uLocations, iDevValues);
 
   // Values from previous iteration to compute the diff against for updates
   float prevSE = 0.0;
@@ -188,7 +222,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
         const arma::uword uGlobal = u + uOffset;
 
         uErrors(index) =
-            *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
+            *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * uDev(i, u) -
+            kappa(i) * iDev(i, u) -
             arma::dot(q.col(i),
                       p.col(uGlobal) +
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
@@ -204,7 +239,9 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     const arma::fvec alphaGrad =
         2 *
         (lambdab * nRuLocal % alpha.rows(uOffset, uOffset + nUsersLocal - 1) -
-         arma::sum(dev % uE, 0).t());
+         arma::sum(uDev % uE, 0).t());
+    const arma::fvec kappaGrad =
+        2 * (lambdab * nRiLocal % kappa - arma::sum(iDev % uE, 1));
 
     arma::fmat qGrad(k, nItems);
     arma::fmat pGrad(k, nUsersLocal);
@@ -243,7 +280,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Compute update steps
     const arma::fvec biStep = -gammab * biGrad;
     const arma::fvec buStep = -gammab * buGrad;
-    const arma::fvec alphaStep = -(gammat / 10000) * alphaGrad;
+    const arma::fvec alphaStep = -gammat * alphaGrad;
+    const arma::fvec kappaStep = -(gammat / 5) * kappaGrad;
     const arma::fmat qStep = -gammaqpy * qGrad;
     const arma::fmat pStep = -gammaqpy * pGrad;
     const arma::fmat yStep = -gammaqpy * yGrad;
@@ -252,6 +290,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     this->stepTable(biTable, biStep, 0, 0);
     this->stepTable(buTable, buStep, 0, uOffset);
     this->stepTable(alphaTable, alphaStep, 0, uOffset);
+    this->stepTable(kappaTable, kappaStep, 0, 0);
     this->stepTable(qTable, qStep.t(), 0, 0);
     this->stepTable(pTable, pStep.t(), 0, uOffset);
     this->stepTable(yTable, yStep.t(), 0, 0);
@@ -262,6 +301,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     bi = gaml::util::table::loadMatrix(biTable, nItems, 1);
     bu = gaml::util::table::loadMatrix(buTable, nUsers, 1);
     alpha = gaml::util::table::loadMatrix(alphaTable, nUsers, 1);
+    kappa = gaml::util::table::loadMatrix(kappaTable, nItems, 1);
     q = gaml::util::table::loadMatrix(qTable, nItems, k).t();
     p = gaml::util::table::loadMatrix(pTable, nUsers, k).t();
     y = gaml::util::table::loadMatrix(yTable, nItems, k).t();
@@ -276,7 +316,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
       const arma::uword u = it.col();
       const arma::uword uGlobal = u + uOffset;
       const float error =
-          *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * dev(i, u) -
+          *it - mu - bi(i) - bu(uGlobal) - alpha(uGlobal) * uDev(i, u) -
+          kappa(i) * iDev(i, u) -
           arma::dot(q.col(i),
                     p.col(uGlobal) +
                         isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
@@ -310,14 +351,28 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     gammaqpy *= 0.9;
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
-  return {mu, bi, bu, alpha, q, p, y};
+  return {mu, bi, bu, alpha, kappa, q, p, y};
 }
 
-void Worker::initTables(int muTableId, int biTableId, int buTableId,
-                        int alphaTableId, int qTableId, int pTableId,
-                        int yTableId, int seTableId, int floatRowType,
-                        int intRowType, int k, int nItems, int nUsers,
-                        int nranks) {
+void Worker::initTables(int tiTableId, int muTableId, int biTableId,
+                        int buTableId, int alphaTableId, int kappaTableId,
+                        int qTableId, int pTableId, int yTableId, int seTableId,
+                        int floatRowType, int intRowType, int k, int nItems,
+                        int nUsers, int nranks) {
+  petuum::ClientTableConfig tiConfig;
+  tiConfig.table_info.row_type = floatRowType;
+  tiConfig.table_info.row_capacity = nItems;
+  tiConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
+  tiConfig.table_info.table_staleness = 0;
+  tiConfig.table_info.oplog_dense_serialized = true;
+  tiConfig.table_info.dense_row_oplog_capacity =
+      tiConfig.table_info.row_capacity;
+  tiConfig.process_cache_capacity = 2;
+  tiConfig.oplog_capacity = 2;
+  tiConfig.thread_cache_capacity = 1;
+  tiConfig.process_storage_type = petuum::BoundedDense;
+  petuum::PSTableGroup::CreateTable(tiTableId, tiConfig);
+
   petuum::ClientTableConfig muConfig;
   muConfig.table_info.row_type = floatRowType;
   muConfig.table_info.row_capacity = nranks;
@@ -373,6 +428,20 @@ void Worker::initTables(int muTableId, int biTableId, int buTableId,
   alphaConfig.thread_cache_capacity = 1;
   alphaConfig.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(alphaTableId, alphaConfig);
+
+  petuum::ClientTableConfig kappaConfig;
+  kappaConfig.table_info.row_type = floatRowType;
+  kappaConfig.table_info.row_capacity = nItems;
+  kappaConfig.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
+  kappaConfig.table_info.table_staleness = 0;
+  kappaConfig.table_info.oplog_dense_serialized = true;
+  kappaConfig.table_info.dense_row_oplog_capacity =
+      kappaConfig.table_info.row_capacity;
+  kappaConfig.process_cache_capacity = 1;
+  kappaConfig.oplog_capacity = 1;
+  kappaConfig.thread_cache_capacity = 1;
+  kappaConfig.process_storage_type = petuum::BoundedDense;
+  petuum::PSTableGroup::CreateTable(kappaTableId, kappaConfig);
 
   petuum::ClientTableConfig qConfig;
   qConfig.table_info.row_type = floatRowType;

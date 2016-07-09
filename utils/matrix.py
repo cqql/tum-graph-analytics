@@ -6,7 +6,7 @@ import scipy.sparse
 
 
 def save(f, A):
-    f.write(struct.pack("2II", *A.shape, A.nnz))
+    f.write(struct.pack("2II", A.shape[0], A.shape[1], A.nnz))
     f.write(A.row.astype(np.uint32).tobytes())
     f.write(A.col.astype(np.uint32).tobytes())
     f.write(A.data.astype(np.float32).tobytes())

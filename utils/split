@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import math
@@ -200,14 +200,14 @@ def main():
         for i in range(args.k):
             P = prodsplits[i][1]
 
-            print("{}x{} (nnz={})".format(*P.shape, P.nnz))
+            print("{}x{} (nnz={})".format(P.shape[0], P.shape[1], P.nnz))
 
         print()
         print("Splits by user")
         for i in range(args.k):
             U = usersplits[i][1]
 
-            print("{}x{} (nnz={})".format(*U.shape, U.nnz))
+            print("{}x{} (nnz={})".format(U.shape[0], U.shape[1], U.nnz))
 
     os.makedirs(args.out)
     np.savetxt(os.path.join(args.out, "users"), users, fmt="%s")

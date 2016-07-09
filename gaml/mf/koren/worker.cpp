@@ -196,8 +196,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
       iDevValues(index) = sgn(tiDev) * std::pow(std::abs(tiDev), beta);
     }
   }
-  arma::sp_fmat uDev(uLocations, uDevValues);
-  arma::sp_fmat iDev(uLocations, iDevValues);
+  arma::sp_fmat uDev(uLocations, uDevValues, uSlice.n_rows, uSlice.n_cols);
+  arma::sp_fmat iDev(uLocations, iDevValues, uSlice.n_rows, uSlice.n_cols);
 
   // Values from previous iteration to compute the diff against for updates
   float prevSE = 0.0;
@@ -229,7 +229,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                           isqNRuLocal(u) * arma::sum(y.cols(RuLocal[u]), 1));
       }
     }
-    const arma::sp_fmat uE(uLocations, uErrors);
+    const arma::sp_fmat uE(uLocations, uErrors, uSlice.n_rows, uSlice.n_cols);
 
     // Compute (partial) gradients
     const arma::fvec biGrad = 2 * (lambdab * nRiLocal % bi - arma::sum(uE, 1));

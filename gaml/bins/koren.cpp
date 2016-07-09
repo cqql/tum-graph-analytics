@@ -90,14 +90,16 @@ struct KorenThread {
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
     auto bu = std::get<2>(factors);
-    auto Q = std::get<3>(factors);
-    auto P = std::get<4>(factors);
-    auto Y = std::get<5>(factors);
+    auto alpha = std::get<3>(factors);
+    auto Q = std::get<4>(factors);
+    auto P = std::get<5>(factors);
+    auto Y = std::get<6>(factors);
 
     if (this->rank == 0) {
       arma::fvec({mu}).save(this->path + "/mu", arma::csv_ascii);
       bi.save(this->path + "/bi", arma::csv_ascii);
       bu.save(this->path + "/bu", arma::csv_ascii);
+      alpha.save(this->path + "/alpha", arma::csv_ascii);
       Q.save(this->path + "/Q", arma::csv_ascii);
       P.save(this->path + "/P", arma::csv_ascii);
       Y.save(this->path + "/Y", arma::csv_ascii);

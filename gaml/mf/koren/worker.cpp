@@ -30,7 +30,8 @@ arma::sp_fmat operator-(const arma::sp_fmat& A, const float& b) {
   return arma::sp_fmat(rowinds, colptrs, vals, A.n_rows, A.n_cols);
 }
 
-std::tuple<float, arma::fvec, arma::fvec, arma::fmat, arma::fmat, arma::fmat>
+std::tuple<float, arma::fvec, arma::fvec, arma::fvec, arma::fmat, arma::fmat,
+           arma::fmat>
 Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                const arma::sp_fmat uSlice, const arma::sp_fmat tSlice,
                const int uOffset, const int k) {
@@ -340,7 +341,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     gammaqpy *= 0.9;
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
-  return {mu, bi, bu, q, p, y};
+  return {mu, bi, bu, alpha, q, p, y};
 }
 
 void Worker::initTables(int muTableId, int biTableId, int buTableId,

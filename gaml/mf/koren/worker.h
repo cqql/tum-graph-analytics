@@ -39,7 +39,8 @@ class Worker {
         yTable(petuum::PSTableGroup::GetTableOrDie<float>(yTableId)),
         seTable(petuum::PSTableGroup::GetTableOrDie<float>(seTableId)) {}
 
-  std::tuple<float, arma::fvec, arma::fvec, arma::fmat, arma::fmat, arma::fmat>
+  std::tuple<float, arma::fvec, arma::fvec, arma::fvec, arma::fmat, arma::fmat,
+             arma::fmat>
   factor(const arma::sp_fmat iSlice, const int iOffset,
          const arma::sp_fmat uSlice, const arma::sp_fmat tSlice,
          const int uOffset, const int k);

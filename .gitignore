@@ -27,6 +27,8 @@ libs/bosen
 mf-als
 bias-mf
 koren
+tf
+softmax
 
 # Python artifacts
 __pycache__

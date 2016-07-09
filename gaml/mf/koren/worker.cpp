@@ -39,6 +39,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
   const auto lambdab = this->lambdab;
   const auto lambdaqpy = this->lambdaqpy;
   auto gammab = this->gammab;
+  auto gammat = this->gammat;
   auto gammaqpy = this->gammaqpy;
   const auto beta = this->beta;
   const auto atol = this->atol;
@@ -269,8 +270,8 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     // Compute update steps
     const arma::fvec biStep = -gammab * biGrad;
     const arma::fvec buStep = -gammab * buGrad;
-    const arma::fvec alphaStep = -(gammab / 10000) * alphaGrad;
-    const arma::fmat b_utStep = -gammab * b_utGrad;
+    const arma::fvec alphaStep = -(gammat / 10000) * alphaGrad;
+    const arma::fmat b_utStep = -gammat * b_utGrad;
     const arma::fmat qStep = -gammaqpy * qGrad;
     const arma::fmat pStep = -gammaqpy * pGrad;
     const arma::fmat yStep = -gammaqpy * yGrad;

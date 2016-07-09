@@ -33,6 +33,7 @@ struct KorenThread {
   float lambdab;
   float lambdaqpy;
   float gammab;
+  float gammat;
   float gammaqpy;
   float beta;
   float atol;
@@ -41,8 +42,8 @@ struct KorenThread {
 
   KorenThread(int nranks, int rank, int localRank, std::string path, int k,
               int iterations, int seed, float lambdab, float lambdaqpy,
-              float gammab, float gammaqpy, float beta, float atol, float rtol,
-              float alpha)
+              float gammab, float gammat, float gammaqpy, float beta,
+              float atol, float rtol, float alpha)
       : nranks(nranks),
         rank(rank),
         localRank(localRank),
@@ -53,6 +54,7 @@ struct KorenThread {
         lambdab(lambdab),
         lambdaqpy(lambdaqpy),
         gammab(gammab),
+        gammat(gammat),
         gammaqpy(gammaqpy),
         beta(beta),
         atol(atol),
@@ -81,9 +83,9 @@ struct KorenThread {
 
     gaml::mf::koren::Worker worker(
         this->rank, this->nranks, this->lambdab, this->lambdaqpy, this->gammab,
-        this->gammaqpy, this->beta, this->atol, this->rtol, Table::MU,
-        Table::BI, Table::BU, Table::ALPHA, Table::Q, Table::P, Table::Y,
-        Table::SE);
+        this->gammat, this->gammaqpy, this->beta, this->atol, this->rtol,
+        Table::MU, Table::BI, Table::BU, Table::ALPHA, Table::Q, Table::P,
+        Table::Y, Table::SE);
     auto factors = worker.factor(iSlice, iOffset, uSlice, tSlice, uOffset, k);
     auto mu = std::get<0>(factors);
     auto bi = std::get<1>(factors);
@@ -132,6 +134,8 @@ int main(int argc, char** argv) {
        "GD step length")
       ("gamma-b", po::value<float>()->default_value(0.007),
        "GD step length for the biases")
+      ("gamma-t", po::value<float>()->default_value(0.007),
+       "GD step length for temporal dynamics")
       ("gamma-qpy", po::value<float>()->default_value(0.007),
        "GD step length for the factors")
       ("lambda", po::value<float>()->default_value(1.0),
@@ -159,6 +163,7 @@ int main(int argc, char** argv) {
   float beta = vm["beta"].as<float>();
   float gamma = vm["gamma"].as<float>();
   float gammab = vm["gamma-b"].as<float>();
+  float gammat = vm["gamma-t"].as<float>();
   float gammaqpy = vm["gamma-qpy"].as<float>();
   float lambda = vm["lambda"].as<float>();
   float lambdab = vm["lambda-b"].as<float>();
@@ -203,7 +208,7 @@ int main(int argc, char** argv) {
         &KorenThread::run,
         std::unique_ptr<KorenThread>(new KorenThread(
             nranks, rank, i, datapath, k, iterations, seed + i, lambdab,
-            lambdaqpy, gammab, gammaqpy, beta, atol, rtol, 0.0)));
+            lambdaqpy, gammab, gammat, gammaqpy, beta, atol, rtol, 0.0)));
   }
 
   for (auto& thread : threads) {

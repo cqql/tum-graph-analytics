@@ -15,16 +15,17 @@ namespace koren {
 class Worker {
  public:
   Worker(const int rank, const int nranks, const float lambdab,
-         const float lambdaqpy, const float gammab, const float gammaqpy,
-         const float beta, const float atol, const float rtol,
-         const int muTableId, const int biTableId, const int buTableId,
-         const int alphaTableId, const int qTableId, const int pTableId,
-         const int yTableId, const int seTableId)
+         const float lambdaqpy, const float gammab, const float gammat,
+         const float gammaqpy, const float beta, const float atol,
+         const float rtol, const int muTableId, const int biTableId,
+         const int buTableId, const int alphaTableId, const int qTableId,
+         const int pTableId, const int yTableId, const int seTableId)
       : rank(rank),
         nranks(nranks),
         lambdab(lambdab),
         lambdaqpy(lambdaqpy),
         gammab(gammab),
+        gammat(gammat),
         gammaqpy(gammaqpy),
         beta(beta),
         atol(atol),
@@ -55,6 +56,7 @@ class Worker {
   const float lambdab;
   const float lambdaqpy;
   const float gammab;
+  const float gammat;
   const float gammaqpy;
   const float beta;
   const float atol;

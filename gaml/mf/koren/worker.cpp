@@ -351,7 +351,7 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     gammaqpy *= 0.9;
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
-  return {mu, bi, bu, alpha, kappa, q, p, y};
+  return std::make_tuple(mu, bi, bu, alpha, kappa, q, p, y);
 }
 
 void Worker::initTables(int tiTableId, int muTableId, int biTableId,

@@ -134,9 +134,6 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
     tiStats = gaml::util::table::loadMatrix(tiTable, nItems, 2);
   }
   const arma::fvec tI = tiStats.col(0) / tiStats.col(1);
-  if (rank == 0) {
-    tI.save("tI", arma::csv_ascii);
-  }
 
   // Indices of all items rated by u for each user u in the local U slice
   std::vector<arma::uvec> RuLocal(nUsersLocal);

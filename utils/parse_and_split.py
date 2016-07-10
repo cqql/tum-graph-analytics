@@ -43,23 +43,23 @@ def get_word_bags(reviews, voc, nlp):
     return ret
 
 def from_test_to_train(train, test, criterion):
-    row = test[criterion].sample(n=1, random_state=np.random.RandomState())
+    row = test[criterion].sample(n=1, random_state=hash(os.urandom(4)))
     train.loc[row.index.item()] = row.iloc[0]
     test.drop(row.index, inplace=True)
     
 def split_df(df, voc, frac=0, n=0):
     train = df
     if frac != 0:
-        test = train.sample(frac=frac, random_state=np.random.RandomState())
+        test = train.sample(frac=frac, random_state=hash(os.urandom(4)))
     else:
-        test = train.sample(n=n, random_state=np.random.RandomState())
+        test = train.sample(n=n, random_state=hash(os.urandom(4)))
     train = train.drop(test.index)
     
     miss_user = test[~test['reviewerID'].isin(train['reviewerID'])]['reviewerID'].unique()
-    miss_prod = test[~test['asin'].isin(train['asin'])]['asin'].unique()
-    
     for mu in miss_user:
         from_test_to_train(train, test, test['reviewerID'] == mu)
+
+    miss_prod = test[~test['asin'].isin(train['asin'])]['asin'].unique()
     for mp in miss_prod:
         from_test_to_train(train, test, test['asin'] == mp)
 

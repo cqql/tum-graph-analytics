@@ -344,8 +344,10 @@ Worker::factor(const arma::sp_fmat iSlice, const int iOffset,
                 << std::endl;
     }
 
-    gammab *= 0.9;
-    gammaqpy *= 0.9;
+    // This actually just hurts performance but does not help convergence for
+    // our datasets
+    // gammab *= 0.9;
+    // gammaqpy *= 0.9;
   } while (iteration == 1 || rimprov >= rtol && aimprov >= atol);
 
   return std::make_tuple(mu, bi, bu, alpha, kappa, q, p, y);

@@ -31,7 +31,7 @@ struct TfThread {
   std::string path;
   int rank;
   int iterations;
-  int evalrounds;
+  int stop_tol;
   int seed;
   float atol;
   float rtol;
@@ -41,13 +41,12 @@ struct TfThread {
   bool reg;
   int reg_thr;
 
-  TfThread(int id, std::string path, int rank, int iterations,
-               int evalrounds, float lambda, bool clamp, bool reg, int reg_thr)
+  TfThread(int id, std::string path, int rank, int iterations, int stop_tol, float lambda, bool clamp, bool reg, int reg_thr)
     : id(id),
       path(path),
       rank(rank),
       iterations(iterations),
-      evalrounds(evalrounds),
+      stop_tol(stop_tol),
       lambda(lambda),
       clamp(clamp),
       reg(reg),
@@ -59,40 +58,39 @@ struct TfThread {
     std::ostringstream userpath;
     std::ostringstream prodpath;
     std::ostringstream wordpath;
+    std::ostringstream valipath;
+    std::ostringstream testpath;
     
     userpath << path << "/_user_train" << id;
     prodpath << path << "/_prod_train" << id;
     wordpath << path << "/_word_train" << id;
+    valipath << path << "/_validation" << id;
+    testpath << path << "/_test" << id;
     
     auto userdata = gaml::io::TensorSlice::parse(userpath.str());
     auto proddata = gaml::io::TensorSlice::parse(prodpath.str());
     auto worddata = gaml::io::TensorSlice::parse(wordpath.str());
+    auto validata = gaml::io::TensorSlice::parse(valipath.str());
+    auto testdata = gaml::io::TensorSlice::parse(testpath.str());
     
     int useroffset = userdata.offset;
     int prodoffset = proddata.offset;
     int wordoffset = worddata.offset;
+    int valioffset = worddata.offset;
+    int testoffset = worddata.offset;
     
     const auto Ruser = userdata.R;
     const auto Rprod = proddata.R;
     const auto Rword = worddata.R;
-    std::tuple<arma::fmat, arma::fmat, arma::fmat> factors;
+    const auto Rvali = validata.R;
+    const auto Rtest = testdata.R;
     
-    if(id == 0) {
-      std::ostringstream testpath;
-      testpath << path << "/_test";
-      auto testTensor = gaml::io::TensorSlice::parse(testpath.str());
-      const auto Rtest = testTensor.R;
-      gaml::tf::Worker worker(id, rank, iterations, Table::U, Table::P, Table::T, Table::SE, 
-                            useroffset, prodoffset, wordoffset, 
-                            Ruser, Rprod, Rword, Rtest);
-      
-      factors = worker.factorize(lambda, clamp, reg, reg_thr);
-    } else {
-      gaml::tf::Worker worker(id, rank, iterations, Table::U, Table::P, Table::T, Table::SE, 
-                            useroffset, prodoffset, wordoffset, 
-                            Ruser, Rprod, Rword);
-      factors = worker.factorize(lambda, clamp, reg, reg_thr);
-    }
+    gaml::tf::Worker worker(id, rank, iterations, Table::U, Table::P, Table::T, Table::SE, 
+                          useroffset, prodoffset, wordoffset, 
+                          Ruser, Rprod, Rword, Rvali, Rtest);
+    
+    auto factors = worker.factorize(lambda, clamp, reg, reg_thr, stop_tol);
+
     auto U = std::get<0>(factors);
     auto P = std::get<1>(factors);
     auto T = std::get<2>(factors);
@@ -107,6 +105,8 @@ struct TfThread {
       U.save(Upath.str(), arma::csv_ascii);
       P.save(Ppath.str(), arma::csv_ascii);
       T.save(Tpath.str(), arma::csv_ascii);
+      
+      std::cout << "max U = "<< U.max() << " max P = " << P.max() << " max T = " << T.max() << std::endl; 
     }
     
     petuum::PSTableGroup::DeregisterThread();
@@ -138,8 +138,6 @@ int main(int argc, char** argv) {
       ("users", po::value<int>(), "Number of users")
       ("products", po::value<int>(), "Number of products")
       ("words", po::value<int>()->default_value(2938), "Number of words")
-      ("eval-rounds,e", po::value<int>()->default_value(0),
-       "Eval the model every k rounds")
       ("seed", po::value<int>()->default_value(0),
        "Random seed")
       ("atol", po::value<float>()->default_value(0.01),
@@ -154,6 +152,7 @@ int main(int argc, char** argv) {
        "Iteration in which to start regularize")
       ("lambda", po::value<float>()->default_value(0.5),
        "Weight of the l2 regularizer")
+      ("stop-tol,s", po::value<int>()->default_value(3), "Stop if no improvement were made in last s iterations")
       ;
        
   po::options_description cmdline_options;
@@ -179,7 +178,6 @@ int main(int argc, char** argv) {
   int num_users = vm["users"].as<int>();
   int num_products = vm["products"].as<int>();
   int num_words = vm["words"].as<int>();
-  int eval_rounds = vm["eval-rounds"].as<int>();
   int seed = vm["seed"].as<int>();
   float atol = vm["atol"].as<float>();
   float rtol = vm["rtol"].as<float>();
@@ -187,6 +185,7 @@ int main(int argc, char** argv) {
   bool reg = vm["reg"].as<bool>();
   int reg_thr = vm["reg-thr"].as<int>();
   float lambda = vm["lambda"].as<float>();
+  int stop_tol = vm["stop-tol"].as<int>();
 
   // Register row types
   petuum::PSTableGroup::RegisterRow<petuum::DenseRow<float>>(RowType::FLOAT);
@@ -215,9 +214,10 @@ int main(int argc, char** argv) {
 
   // run workers
   for (int i = 0; i < num_workers; i++) {
+    int id = client_id * num_workers + i;
     threads[i] = std::thread(&TfThread::run,
                              std::unique_ptr<TfThread>(new TfThread(
-                              i, datapath, rank, iterations, eval_rounds, lambda, clamp, reg, reg_thr)));
+                              id, datapath, rank, iterations, stop_tol, lambda, clamp, reg, reg_thr)));
   }
 
   for (auto& thread : threads) {

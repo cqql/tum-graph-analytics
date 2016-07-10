@@ -18,7 +18,6 @@ def save(f, offset, rows, cols, bags, words, vals, n_rows=0, n_cols=0, n_words=0
         n_cols = max(cols)+1
     if n_words == 0:
         n_words = max(words)+1
-    print offset, n_rows, n_cols, n_words, len(rows), len(vals)
     array.array("I", [offset, n_rows, n_cols, n_words, len(rows), len(vals)]).write(f)
     array.array("I", rows).write(f)
     array.array("I", cols).write(f)
@@ -53,7 +52,9 @@ def save_df_word(df, path, userkeys, prodkeys, offset, k):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", type=float, default=0.2, help="Test size")
+    parser.add_argument("-t", type=float, default=0.25, help="Fraction of test set")
+    parser.add_argument("-v", type=float, default=0.33, help="Fraction of validation set of total training set") 
+    parser.add_argument("-w", type=int, default=10, help="Threshold of lowest frequency for a word to be considered for the vocabulary.")
     parser.add_argument("k", type=int, help="Split k-ways")
     parser.add_argument("data", help="Review data file")
     parser.add_argument("out", help="Output directory")
@@ -68,7 +69,7 @@ def main():
 
     # build vocab
     start = time.clock()
-    voc, count = zip(*get_vocab(get_rev(args.data, 'reviewText'), 10, eng))
+    voc, count = zip(*get_vocab(get_rev(args.data, 'reviewText'), args.w, eng))
     end = time.clock()
     print "build vocab done in ", end - start
 
@@ -95,7 +96,9 @@ def main():
 
     # df used to split in user and prod dimensions
     df_total = pd.concat([df,wbdf], axis=1, join='inner', copy='false')
-    df_train, df_test = split_train_test(df_total, voc, frac=args.t)
+    df_train, df_test = split_df(df_total, voc, frac=args.t)
+    df_train, df_validation = split_df(df_train, voc, frac=args.v)
+    
 
     # save user-split train files
     for ind, (offset, size, df_user) in enumerate(get_k_splits(df_train, 'reviewerID', users, args.k)):
@@ -109,21 +112,30 @@ def main():
     print "saved prodsplit train"
     # save words-split train files
     offset, df_word = get_k_splits_words(df_train, df_train['wordBags'], voc, count, args.k)
-    print df_word.columns.values
+
     outpath = os.path.join(args.out, "_word_train")
     save_df_word(df_word, outpath, userkeys, prodkeys, offset, args.k)
     print "saved wordsplit train"
     
-    # test set
-    outpath = os.path.join(args.out, "_test")
-    save_df(df_test, outpath, userkeys, prodkeys, 0, n_rows=len(users), n_cols=len(prods), n_words=len(voc))
+    # save validation set split along the users
+    for ind, (offset, size, df_v) in enumerate(get_k_splits(df_validation, 'reviewerID', users, args.k)):
+        outpath = os.path.join(args.out, "_validation" + `ind`)
+        save_df(df_v, outpath, userkeys, prodkeys, offset, n_rows=size, n_words=len(voc))
+    print "saved validation split"
+    # save test set split along the users
+    for ind, (offset, size, df_t) in enumerate(get_k_splits(df_test, 'reviewerID', users, args.k)):
+        outpath = os.path.join(args.out, "_test" + `ind`)
+        save_df(df_t, outpath, userkeys, prodkeys, offset, n_rows=size, n_words=len(voc))
+    print "saved test split"
     
-    json.dump([{'users': len(users), 'products': len(prods), 'words' : len(voc), 'train' : len(df_train), 'test' : len(df_test)}, 
+    # document some meta data
+    json.dump([{'users': len(users), 'products': len(prods), 'words' : len(voc), 'train' : len(df_train), 'test' : len(df_test), 'validation' : len(df_validation)}, 
             {'vocab' : [eng.vocab.strings[w] for w in voc]}], 
             open(os.path.join(args.out, "meta.txt"), "w"))
-    run_config = "\n".join(["clients=1", "id=0", "workers="+str(args.k), "iterations=30", "users="+str(len(users)), "products="+str(len(prods)), "words="+str(len(voc)), 
-                        "eval-rounds=1", "seed=0", "atol=0.01", "rtol=0.01", "lambda=0.5", "clamp=true", "reg=false", "reg-thr=1"])
 
+    # write config file necessary for running the tf program
+    run_config = "\n".join(["clients=1", "id=0", "workers="+str(args.k), "iterations=30", "users="+str(len(users)), "products="+str(len(prods)), "words="+str(len(voc)), 
+                        "seed=0", "atol=0.01", "rtol=0.01", "lambda=0.5", "clamp=true", "reg=false", "reg-thr=1", "stop-tol=2"])
     with open(os.path.join(args.out, "run_config.cfg"), "w") as f:
         f.write(run_config)
 

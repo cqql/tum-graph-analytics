@@ -18,9 +18,10 @@ class Worker {
                const gaml::io::Sparse3dTensor& Ruser, 
                const gaml::io::Sparse3dTensor& Rprod, 
                const gaml::io::Sparse3dTensor& Rword, 
-               const gaml::io::Sparse3dTensor& Rtest=gaml::io::Sparse3dTensor());
+               const gaml::io::Sparse3dTensor& Rvali,
+               const gaml::io::Sparse3dTensor& Rtest);
 
-  std::tuple<arma::fmat, arma::fmat, arma::fmat> factorize(float lambda=0.5, bool clamp=false, bool reg=false, int reg_thr=1);
+  std::tuple<arma::fmat, arma::fmat, arma::fmat> factorize(float lambda, bool clamp, bool reg, int reg_thr, int stop_tol);
   
   static void initTables(int uTableId, int pTableId, int tTableId, int seTableId, int rowType, int k,
                         int uNumRows, int pNumRows, int tNumRows, int num_eval, int num_workers);
@@ -39,12 +40,21 @@ class Worker {
   const gaml::io::Sparse3dTensor& Ruser;
   const gaml::io::Sparse3dTensor& Rprod;
   const gaml::io::Sparse3dTensor& Rword;
+  const gaml::io::Sparse3dTensor& Rvali;
   const gaml::io::Sparse3dTensor& Rtest;
-
-  // Initialize table as an m*n matrix with random entries
-  void randomizetable(petuum::Table<float>& table, int m, int n, int offset);
-
+  std::vector<float> se_train_vec;
+  std::vector<float> se_vali_vec;
+  
   float eval(arma::fmat& U, arma::fmat& P, arma::fmat& T, const gaml::io::Sparse3dTensor& R);
+  
+  void update_setable(arma::fmat& U, arma::fmat& P, arma::fmat& T, int round, float& last_se_train, float& last_se_vali);
+  
+  void update_mse(int round);
+  
+  std::tuple<float, float> read_split_sum(int row);
+  
+  bool check_stop(int round, int stop_tol);
+  
   void output(int round, float mse_test, float mse_train);
 };
 } // end tf

@@ -47,7 +47,7 @@ def from_test_to_train(train, test, criterion):
     train.loc[row.index.item()] = row.iloc[0]
     test.drop(row.index, inplace=True)
     
-def split_train_test(df, voc, frac=0, n=0):
+def split_df(df, voc, frac=0, n=0):
     train = df
     if frac != 0:
         test = train.sample(frac=frac, random_state=np.random.RandomState())
@@ -58,25 +58,19 @@ def split_train_test(df, voc, frac=0, n=0):
     miss_user = test[~test['reviewerID'].isin(train['reviewerID'])]['reviewerID'].unique()
     miss_prod = test[~test['asin'].isin(train['asin'])]['asin'].unique()
     
-    print "missing users products"
-    print len(miss_user), len(miss_prod)
-    
-    print len(train), len(test)
     for mu in miss_user:
         from_test_to_train(train, test, test['reviewerID'] == mu)
     for mp in miss_prod:
         from_test_to_train(train, test, test['asin'] == mp)
-    print len(train), len(test)
+
     miss_words = set(range(len(voc)))
     for wb in train['wordBags']:
         miss_words -= set(wb)
         if not miss_words:
-            print "no missing words"
             return train, test
     for mw in miss_words:
         from_test_to_train(train, test, test['wordBags'].map(lambda wb: mw in wb))
     
-    print len(train), len(test)
     return train, test
 
 def get_k_splits(df, index, uni, k):

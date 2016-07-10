@@ -12,11 +12,14 @@
 namespace gaml {
 namespace tf {
 
+static const int mse_log = 10;
+
 Worker::Worker(int id, int rank, int iterations, int usertableid, int prodtableid, int wordtableid, int setableid,
                int useroffset, int prodoffset, int wordoffset, 
                const gaml::io::Sparse3dTensor& Ruser, 
                const gaml::io::Sparse3dTensor& Rprod, 
                const gaml::io::Sparse3dTensor& Rword, 
+               const gaml::io::Sparse3dTensor& Rvali,
                const gaml::io::Sparse3dTensor& Rtest)
     : id(id),
       rank(rank),
@@ -31,36 +34,39 @@ Worker::Worker(int id, int rank, int iterations, int usertableid, int prodtablei
       Ruser(Ruser),
       Rprod(Rprod),
       Rword(Rword),
-      Rtest(Rtest) {}
+      Rvali(Rvali),
+      Rtest(Rtest),
+      se_train_vec(std::vector<float>(mse_log)),
+      se_vali_vec(std::vector<float>(mse_log)) {}
 
-std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, bool clamp, bool reg, int reg_thr) {
+std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, bool clamp, bool reg, int reg_thr, int stop_tol) {
 
-  // Register rows
-  /*if (id == 0) {
-    for (int i = 0; i < rank; i++) {
-      usertable.GetAsyncForced(i);
-      prodtable.GetAsyncForced(i);
-      wordtable.GetAsyncForced(i);
-    }
-  }*/
+  feenableexcept(FE_DIVBYZERO|FE_INVALID|FE_OVERFLOW);
+  petuum::RowAccessor rowacc;
   
-
-  //petuum::PSTableGroup::GlobalBarrier();
-  
-  arma::arma_rng::set_seed_random();
+  // Initialize tables with random values
+  //arma::arma_rng::set_seed_random();
   gaml::util::table::randomizeTable(usertable, rank, Ruser.n_rows, useroffset);
   gaml::util::table::randomizeTable(prodtable, rank, Rprod.n_cols, prodoffset);
   gaml::util::table::randomizeTable(wordtable, rank, Rword.n_words, wordoffset);
+  
+  float last_se_train=0;
+  float last_se_vali=0;
+  setable.Inc(1, id*2, Rvali.n_nz);
+  setable.Inc(1, id*2+1, Rtest.n_nz);
+  
   petuum::PSTableGroup::GlobalBarrier();
   
   // Fetch U, P and T
   auto U = gaml::util::table::loadMatrix(usertable, Rword.n_rows, rank);
   auto P = gaml::util::table::loadMatrix(prodtable, Rword.n_cols, rank);
   auto T = gaml::util::table::loadMatrix(wordtable, Ruser.n_words, rank);
-
-  feenableexcept(FE_DIVBYZERO);
+  
+  auto sum_sizes = read_split_sum(1);
+  auto vali_size = std::get<0>(sum_sizes);
+  auto test_size = std::get<1>(sum_sizes);
+  
   for (int round = 0; round < iterations; round++) {
-    
     ///////
     // Compute gradient for U
     ///////
@@ -85,7 +91,6 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
     if(reg && round > reg_thr) {
       Ugrad = Ugrad - lambda * Ulocal % Ulocal / Udenom;
     }
-    
 
     // Update U table
     gaml::util::table::updateMatrixSlice(Ugrad, usertable, Ugrad.n_rows, Ugrad.n_cols, useroffset);
@@ -170,28 +175,37 @@ std::tuple<arma::fmat, arma::fmat, arma::fmat> Worker::factorize(float lambda, b
       T = arma::clamp(T, 0.0, std::numeric_limits<float>::max());
     }
     
-    float se = eval(U, P, T, Ruser);
-    setable.Inc(round, id, se);
+    update_setable(U, P, T, round, last_se_train, last_se_vali);
     
     petuum::PSTableGroup::GlobalBarrier();
     
-    if (id == 0) {
-      petuum::RowAccessor rowacc;
-      std::vector<float> se;
-      const auto& col = setable.Get<petuum::DenseRow<float>>(round, &rowacc);
-      col.CopyToVector(&se);
-      auto mse_test = eval(U, P, T, Rtest);
-      auto mse_train = std::accumulate(se.begin(), se.end(), 0.0f);
-      
-      output(round+1, mse_test / Rtest.n_nz, mse_train / Rword.n_nz);
+    update_mse(round);
+    
+    if(id == 0) {
+      output(round+1, se_train_vec[round % mse_log] / Rword.n_nz, se_vali_vec[round % mse_log] / vali_size);
+    }
+    if(check_stop(round, stop_tol)) {
+      break;
     }
   }
-
+  
+  float se_test = eval(U, P, T, Rtest);
+  setable.Inc(2, id, se_test);  
+  
+  petuum::PSTableGroup::GlobalBarrier();
+  
+  if(id == 0) {
+    std::vector<float> se_test_vec;
+    const auto& row = setable.Get<petuum::DenseRow<float>>(2, &rowacc);
+    row.CopyToVector(&se_test_vec);
+    float mse_test = std::accumulate(se_test_vec.begin(), se_test_vec.end(), 0.0f);
+    std::cout << "MSE test: " << mse_test / test_size << std::endl;
+  }
   return std::make_tuple(U, P, T);
 }
 
-void Worker::output(int round, float mse_test, float mse_train) {
-  std::cout << "Round: " << round << " MSE Test: " << mse_test << " MSE Train: " << mse_train << std::endl;
+void Worker::output(int round, float se_train_vec, float se_vali_vec) {
+  std::cout << "Round: " << round << " MSE train: " << se_train_vec << " MSE validation: " << se_vali_vec << std::endl;
 }
 
 float Worker::eval(arma::fmat& U, arma::fmat& P, arma::fmat& T, const gaml::io::Sparse3dTensor& R) {
@@ -207,6 +221,48 @@ float Worker::eval(arma::fmat& U, arma::fmat& P, arma::fmat& T, const gaml::io::
   }
 
   return se;
+}
+
+void Worker::update_setable(arma::fmat& U, arma::fmat& P, arma::fmat& T, int round, float& last_se_train, float& last_se_vali) {
+  float se_train = eval(U, P, T, Ruser);
+  float se_vali = eval(U, P, T, Rvali);
+  float tmp = last_se_train;
+  se_train = (last_se_train = se_train) - tmp;
+  tmp = last_se_vali;
+  se_vali = (last_se_vali = se_vali) - tmp;
+  
+  setable.Inc(0, id*2, se_train);
+  setable.Inc(0, id*2+1, se_vali);
+}
+
+void Worker::update_mse(int round) {
+  auto se = read_split_sum(0);
+  se_train_vec[round % mse_log] = std::get<0>(se);
+  se_vali_vec[round % mse_log] = std::get<1>(se);
+}
+
+std::tuple<float, float> Worker::read_split_sum(int type) {
+  petuum::RowAccessor rowacc;
+  std::vector<float> even;
+  std::vector<float> odd;
+  std::vector<float> buf;
+  bool toggle = false;
+  const auto& row = setable.Get<petuum::DenseRow<float>>(type, &rowacc);
+  row.CopyToVector(&buf);
+  std::partition_copy(buf.begin(), buf.end(), std::back_inserter(even), std::back_inserter(odd), [&toggle](float){ return toggle = !toggle;});
+  return std::make_tuple(std::accumulate(even.begin(), even.end(), 0.0f), std::accumulate(odd.begin(), odd.end(), 0.0f));
+}
+
+bool Worker::check_stop(int round, int stop_tol) {
+  if(round < stop_tol) {
+    return false;
+  }
+  for(int i = 0; i < stop_tol; i++) {
+    if(se_vali_vec[(round - i) % mse_log] < se_vali_vec[(round - i - 1) % mse_log]){
+      return false;
+    }
+  }
+  return true;
 }
 
 
@@ -257,14 +313,14 @@ void Worker::initTables(int uTableId, int pTableId, int tTableId, int seTableId,
   
   petuum::ClientTableConfig se_config;
   se_config.table_info.row_type = rowType;
-  se_config.table_info.row_capacity = num_workers;
+  se_config.table_info.row_capacity = num_workers*2;
   se_config.table_info.row_oplog_type = petuum::RowOpLogType::kDenseRowOpLog;
   se_config.table_info.table_staleness = 0;
   se_config.table_info.oplog_dense_serialized = true;
   se_config.table_info.dense_row_oplog_capacity =
       se_config.table_info.row_capacity;
-  se_config.process_cache_capacity = num_eval;
-  se_config.oplog_capacity = num_eval;
+  se_config.process_cache_capacity = 3;
+  se_config.oplog_capacity = 3;
   se_config.thread_cache_capacity = 1;
   se_config.process_storage_type = petuum::BoundedDense;
   petuum::PSTableGroup::CreateTable(seTableId, se_config); 

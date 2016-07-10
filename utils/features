@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+
+import numpy as np
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d",
+                        "--data",
+                        help="Data directory from matrix factorization")
+
+    args = parser.parse_args()
+    data = args.data
+
+    mupath = os.path.join(data, "mu")
+    bipath = os.path.join(data, "bi")
+    kappapath = os.path.join(data, "kappa")
+    bupath = os.path.join(data, "bu")
+    alphapath = os.path.join(data, "alpha")
+    Qpath = os.path.join(data, "Q")
+    Ppath = os.path.join(data, "P")
+    Ypath = os.path.join(data, "Y")
+
+    # Item factors
+    Q = np.loadtxt(Qpath, delimiter=",", ndmin=2)
+
+    # User factors
+    P = np.loadtxt(Ppath, delimiter=",", ndmin=2)
+
+    # Implicit feedback factors
+    Y = np.loadtxt(Ypath, delimiter=",", ndmin=2)
+
+    # Overall mean
+    if os.path.isfile(mupath):
+        mu = np.loadtxt(mupath, delimiter=",", ndmin=1)[0]
+    else:
+        mu = 0.0
+
+    # Item biases
+    if os.path.isfile(bipath):
+        bi = np.loadtxt(bipath, delimiter=",")
+    else:
+        bi = np.zeros((Q.shape[1], ))
+
+    # Item bias trend slopes
+    if os.path.isfile(kappapath):
+        kappa = np.loadtxt(kappapath, delimiter=",")
+    else:
+        kappa = np.zeros((Q.shape[1]))
+
+    # User biases
+    if os.path.isfile(bupath):
+        bu = np.loadtxt(bupath, delimiter=",")
+    else:
+        bu = np.zeros((P.shape[1], ))
+
+    # User bias trend slopes
+    if os.path.isfile(alphapath):
+        alpha = np.loadtxt(alphapath, delimiter=",")
+    else:
+        alpha = np.zeros((P.shape[1]))
+
+    itemfeatures = np.vstack([Q, Y, bi, kappa])
+    userfeatures = np.vstack([P, bu, alpha])
+
+    np.savetxt(os.path.join(data, "itemfeatures"), itemfeatures, delimiter=",")
+    np.savetxt(os.path.join(data, "userfeatures"), userfeatures, delimiter=",")
+
+
+if __name__ == "__main__":
+    main()

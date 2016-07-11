@@ -82,7 +82,10 @@ def main():
     P = np.loadtxt(Ppath, delimiter=",", ndmin=2)
 
     # Implicit feedback factors
-    Y = np.loadtxt(Ypath, delimiter=",", ndmin=2)
+    if os.path.isfile(Ypath):
+        Y = np.loadtxt(Ypath, delimiter=",", ndmin=2)
+    else:
+        Y = np.zeros(Q.shape)
 
     # Overall mean
     if os.path.isfile(mupath):

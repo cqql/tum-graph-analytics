@@ -1,5 +1,15 @@
 # Large-Scale Graph Analytics with Bösen
 
+A group project for the
+[Large-Scale Graph Analytics and Machine Learning](http://www.kdd.in.tum.de/index.php/teaching/labcourse2016/)
+lab course at TUM.
+
+## Authors (in alphabetical order)
+
+- David Zhang
+- Marten Lienen
+- Rostislav Nedelchev
+
 ## Installation
 
 ```sh
